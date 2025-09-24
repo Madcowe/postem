@@ -1,0 +1,10 @@
+[package]
+name = "postem"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+autonomi = "0.6.0"
+thiserror = "2.0.16"
+tokio = "1.47.1"
