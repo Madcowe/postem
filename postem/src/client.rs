@@ -15,7 +15,8 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use autonomi::Client;
+use autonomi::client::payment::PaymentOption;
+use autonomi::{Client, Wallet};
 
 use crate::error::PostemError;
 
@@ -26,8 +27,8 @@ pub enum ConnectionType {
 }
 
 pub struct PostemClient {
-    connection_type: ConnectionType,
-    client: Client,
+    pub(crate) connection_type: ConnectionType,
+    pub(crate) client: Client,
 }
 impl PostemClient {
     pub async fn init(connection_type: ConnectionType) -> Result<PostemClient, PostemError> {
@@ -47,5 +48,34 @@ impl PostemClient {
             connection_type,
             client,
         })
+    }
+
+    pub async fn get_payment_option(
+        &self,
+        private_key: &str,
+    ) -> Result<PaymentOption, PostemError> {
+        Ok(PaymentOption::from(
+            self.get_funded_wallet(&private_key).await?,
+        ))
+    }
+
+    pub async fn get_funded_wallet(&self, private_key: &str) -> Result<Wallet, PostemError> {
+        let private_key = match self.connection_type {
+            ConnectionType::Antnet => private_key,
+            ConnectionType::Local => {
+                "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+            }
+        };
+        let wallet =
+            match Wallet::new_from_private_key(self.client.evm_network().clone(), private_key) {
+                Ok(wallet) => wallet,
+                Err(e) => {
+                    return Err(PostemError::FailedToGetWallet(
+                        private_key.to_string(),
+                        format!("{:?}", e),
+                    ));
+                }
+            };
+        Ok(wallet)
     }
 }

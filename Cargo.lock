@@ -4446,6 +4446,7 @@ name = "postem"
 version = "0.1.0"
 dependencies = [
  "autonomi",
+ "blsttc",
  "thiserror 2.0.16",
  "tokio",
 ]

@@ -15,7 +15,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use autonomi::{GraphEntry, Pointer, SecretKey};
+use autonomi::pointer::PointerTarget;
+use autonomi::{
+    Bytes, GraphEntry, GraphEntryAddress, Pointer, PointerAddress, PublicKey, SecretKey,
+};
 
 use crate::{client::PostemClient, error::PostemError};
 
@@ -47,6 +50,23 @@ impl PostemName {
             .map(|s| s.to_string())
             .collect();
         Ok(PostemName(doms))
+    }
+
+    pub fn derive_key(&self) -> Result<SecretKey, PostemError> {
+        let mut key = SecretKey::from_hex(&POSTEM_DERIVED_KEY_BASE)?;
+        for domain in self.0.clone() {
+            key = key.derive_child(&Bytes::copy_from_slice(domain.as_bytes()));
+        }
+        Ok(key)
+    }
+}
+
+impl PostemClient {
+    pub async fn name_check_exists(&self, public_key: &PublicKey) -> Result<bool, PostemError> {
+        Ok(self
+            .client
+            .graph_entry_check_existence(&GraphEntryAddress::new(public_key.clone()))
+            .await?)
     }
 }
 
@@ -94,6 +114,7 @@ impl PostemName {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]
@@ -129,5 +150,27 @@ mod tests {
             result,
             Ok(PostemName(vec!["dom".to_string(), "dom".to_string()]))
         );
+    }
+
+    #[tokio::test]
+    #[ignore]
+    // Assumes run from freshly started local client
+    async fn name_check_exists() -> Result<(), PostemError> {
+        let client = PostemClient::init(crate::client::ConnectionType::Local).await?;
+        let name = PostemName::create("dom.dom")?;
+        let secret_key = name.derive_key()?;
+        let public_key = secret_key.public_key();
+        let bool = client.name_check_exists(&public_key).await?;
+        assert_eq!(bool, false);
+        let target = PointerTarget::PointerAddress(PointerAddress::new(public_key));
+        let payment_option = client.get_payment_option("").await?;
+        client
+            .client
+            .pointer_create(&secret_key, target, payment_option)
+            .await?;
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let bool = client.name_check_exists(&public_key).await?;
+        assert_eq!(bool, true);
+        Ok(())
     }
 }

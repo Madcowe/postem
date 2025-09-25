@@ -14,6 +14,8 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+use autonomi::graph::GraphError;
+use autonomi::pointer::PointerError;
 
 #[derive(Debug, thiserror::Error, PartialEq, Clone)]
 pub enum PostemError {
@@ -23,4 +25,31 @@ pub enum PostemError {
     BlankName,
     #[error("Requested name contains the following invalid character: {0}")]
     NameContainsInvalidCharatcers(char),
+    #[error("Graph entry error: {0}")]
+    GraphEntryError(String),
+    #[error("Pointer error: {0}")]
+    PointerEntryError(String),
+    #[error("Could not get funded wallet with key: |{0}| {1}")]
+    FailedToGetWallet(String, String),
+    #[error("{0}")]
+    BLSError(String),
+}
+impl From<GraphError> for PostemError {
+    fn from(e: GraphError) -> Self {
+        let message = format!("{e}");
+        PostemError::GraphEntryError(message)
+    }
+}
+impl From<PointerError> for PostemError {
+    fn from(e: PointerError) -> Self {
+        let message = format!("{e}");
+        PostemError::PointerEntryError(message)
+    }
+}
+
+impl From<blsttc::Error> for PostemError {
+    fn from(e: blsttc::Error) -> Self {
+        let message = format!("{e}");
+        PostemError::BLSError(message)
+    }
 }
