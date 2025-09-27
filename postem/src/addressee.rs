@@ -15,6 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use autonomi::client::payment::PaymentOption;
 use autonomi::pointer::PointerTarget;
 use autonomi::{
     Bytes, GraphEntry, GraphEntryAddress, Pointer, PointerAddress, PublicKey, SecretKey,
@@ -62,11 +63,34 @@ impl PostemName {
 }
 
 impl PostemClient {
-    pub async fn name_check_exists(&self, public_key: &PublicKey) -> Result<bool, PostemError> {
+    pub async fn check_if_public_key_used(
+        &self,
+        public_key: &PublicKey,
+    ) -> Result<bool, PostemError> {
         Ok(self
             .client
             .graph_entry_check_existence(&GraphEntryAddress::new(public_key.clone()))
             .await?)
+    }
+}
+
+/// The base of a postem address from which the location of all received pacakges can be derived
+/// the first entry in parents is the (address/public key) of a pointer to the last received package
+/// the key pair used to create said pointer is also use for encrypton
+#[derive(Debug, PartialEq)]
+pub struct PostemBase(GraphEntry);
+impl PostemClient {
+    pub async fn base_create(
+        &self,
+        address: SecretKey,
+        last_recieve_pk: &PublicKey,
+        payment_option: PaymentOption,
+    ) -> Result<PostemBase, PostemError> {
+        let base = GraphEntry::new(&address, vec![last_recieve_pk.clone()], [0u8; 32], vec![]);
+        self.client
+            .graph_entry_put(base.clone(), payment_option)
+            .await?;
+        Ok(PostemBase(base))
     }
 }
 
@@ -75,47 +99,49 @@ impl PostemClient {
 /// pointer to the latest valid package recieved. Received in this context means the owner of the
 /// address has followed the chain of pacakges from the base up to this point...there may well be
 /// pacakges that have been sent since they last checked beyond this location.
-// pub struct Addressee {
-//     address: Name,
-//     secret_key: SecretKey,
-//     base: Base,
-//     last_recieved: Pointer,
-// }
-// impl PostemClient {
-//     async fn addressee_create(&self, )
-// }
-// impl Addressee {
-//     fn create(name &str, payment_option: PaymentOption) -> Result<Self> {
-//         let address = address_from_string(name);
-//         /// check address available
-//         let last_recieve = create_pointer else return Err(NameAlredyTaken());
-//         let base = Base::create(address, last recieved);
-//         // what if name is taken between last recieved being created
-//         Ok(Addressee{
-//             address,
-//             base,
-//             last_recieved,
-//         })
-//     }
-// }
-
-// /// derives as secrey key from the derive name base and name
-// fn address_from_string(name &str) -> Result<SecretKey> {
-// }
-
-// pub struct Base(GraphEntry);
-// the content field is the (address/public key) of a pointer to the last received package
-// the key pair used to create said pointer is also use for encrypton
-// impl Base {
-//     fn create(address: SecretKey, last_recieved: Pointer ) -> Result<Self> {
-
-//     }
-// }
+#[derive(Debug, PartialEq)]
+pub struct Addressee {
+    address: PostemName,
+    secret_key: SecretKey,
+    base: PostemBase,
+    last_recieved: PointerAddress,
+}
+impl PostemClient {
+    pub async fn addressee_create(
+        &self,
+        name: &str,
+        payment_option: PaymentOption,
+    ) -> Result<Addressee, PostemError> {
+        let address = PostemName::create(&name)?;
+        let base_sk = address.derive_key()?;
+        let base_pk = base_sk.public_key();
+        let target = PointerTarget::GraphEntryAddress(GraphEntryAddress::new(base_pk));
+        let secret_key = SecretKey::random();
+        if self.check_if_public_key_used(&base_pk).await? {
+            return Err(PostemError::NameAlreadyExists(name.to_string()));
+        }
+        let (_, pointer_address) = self
+            .client
+            .pointer_create(&secret_key, target, payment_option.clone())
+            .await?;
+        // what if name is taken between last recieved being created
+        let base = self
+            .base_create(base_sk, &secret_key.public_key(), payment_option.clone())
+            .await?;
+        Ok(Addressee {
+            address,
+            secret_key,
+            base,
+            last_recieved: pointer_address,
+        })
+    }
+}
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
+    use crate::{addressee, client::ConnectionType};
 
     #[test]
     fn postem_name() {
@@ -155,12 +181,13 @@ mod tests {
     #[tokio::test]
     #[ignore]
     // Assumes run from freshly started local client
-    async fn name_check_exists() -> Result<(), PostemError> {
-        let client = PostemClient::init(crate::client::ConnectionType::Local).await?;
+    async fn check_if_public_key_used() -> Result<(), PostemError> {
+        let client = PostemClient::init(ConnectionType::Local).await?;
         let name = PostemName::create("dom.dom")?;
         let secret_key = name.derive_key()?;
         let public_key = secret_key.public_key();
-        let bool = client.name_check_exists(&public_key).await?;
+        let bool = client.check_if_public_key_used(&public_key).await?;
+        // This will fail if local clinet data has not been reset
         assert_eq!(bool, false);
         let target = PointerTarget::PointerAddress(PointerAddress::new(public_key));
         let payment_option = client.get_payment_option("").await?;
@@ -169,8 +196,28 @@ mod tests {
             .pointer_create(&secret_key, target, payment_option)
             .await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        let bool = client.name_check_exists(&public_key).await?;
+        let bool = client.check_if_public_key_used(&public_key).await?;
         assert_eq!(bool, true);
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore]
+    // Assumes run from freshly started local client
+    async fn create_addressee() -> Result<(), PostemError> {
+        let client = PostemClient::init(ConnectionType::Local).await?;
+        let payment_option = client.get_payment_option("").await?;
+        let name = "my.address";
+        let addressee = client
+            .addressee_create(name, payment_option.clone())
+            .await?;
+        assert_eq!(addressee.address, PostemName::create(&name)?);
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let addressee_result = client.addressee_create(name, payment_option.clone()).await;
+        assert_eq!(
+            addressee_result,
+            Err(PostemError::NameAlreadyExists(name.to_string()))
+        );
         Ok(())
     }
 }

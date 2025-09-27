@@ -27,6 +27,8 @@ pub enum PostemError {
     NameContainsInvalidCharatcers(char),
     #[error("Graph entry error: {0}")]
     GraphEntryError(String),
+    #[error("An addressee already exists with name: {0}\nPlease choose another one.")]
+    NameAlreadyExists(String),
     #[error("Pointer error: {0}")]
     PointerEntryError(String),
     #[error("Could not get funded wallet with key: |{0}| {1}")]
