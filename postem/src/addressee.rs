@@ -15,11 +15,13 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use autonomi::client::key_derivation::DerivationIndex;
 use autonomi::client::payment::PaymentOption;
 use autonomi::pointer::PointerTarget;
 use autonomi::{
-    Bytes, GraphEntry, GraphEntryAddress, Pointer, PointerAddress, PublicKey, SecretKey,
+    AttoTokens, Bytes, GraphEntry, GraphEntryAddress, PointerAddress, PublicKey, SecretKey,
 };
+use blsttc::rand;
 
 use crate::{client::PostemClient, error::PostemError};
 
@@ -76,17 +78,24 @@ impl PostemClient {
 
 /// The base of a postem address from which the location of all received pacakges can be derived
 /// the first entry in parents is the (address/public key) of a pointer to the last received package
-/// the key pair used to create said pointer is also use for encrypton
+/// the key pair used to create said pointer is also use for encrypton, the content is the
+/// derivation index that will be used to generate all subseqent package locations.
 #[derive(Debug, PartialEq)]
 pub struct PostemBase(GraphEntry);
 impl PostemClient {
     pub async fn base_create(
         &self,
         address: SecretKey,
-        last_recieve_pk: &PublicKey,
+        last_recieved_pk: &PublicKey,
         payment_option: PaymentOption,
     ) -> Result<PostemBase, PostemError> {
-        let base = GraphEntry::new(&address, vec![last_recieve_pk.clone()], [0u8; 32], vec![]);
+        let index = DerivationIndex::random(&mut rand::thread_rng());
+        let base = GraphEntry::new(
+            &address,
+            vec![last_recieve_pk.clone()],
+            index.into_bytes(),
+            vec![],
+        );
         self.client
             .graph_entry_put(base.clone(), payment_option)
             .await?;
@@ -135,13 +144,28 @@ impl PostemClient {
             last_recieved: pointer_address,
         })
     }
+
+    pub async fn addresses_cost(&self, name: &str) -> Result<AttoTokens, PostemError> {
+        let address = PostemName::create(&name)?;
+        let graph_key = address.derive_key()?.public_key();
+        let graph_entry_cost = self.client.graph_entry_cost(&graph_key);
+        let pointer_key = SecretKey::random().public_key();
+        let pointer_cost = self.client.pointer_cost(&pointer_key);
+        let cost = graph_entry_cost
+            .await?
+            .checked_add(pointer_cost.await?)
+            .unwrap_or(AttoTokens::zero());
+        Ok(cost)
+    }
 }
 
 #[cfg(test)]
 mod tests {
 
+    use autonomi::Client;
+
     use super::*;
-    use crate::{addressee, client::ConnectionType};
+    use crate::client::ConnectionType;
 
     #[test]
     fn postem_name() {
@@ -208,6 +232,8 @@ mod tests {
         let client = PostemClient::init(ConnectionType::Local).await?;
         let payment_option = client.get_payment_option("").await?;
         let name = "my.address";
+        let estimate = client.addresses_cost(&name).await?;
+        eprintln!("Estimate: {:?}", estimate);
         let addressee = client
             .addressee_create(name, payment_option.clone())
             .await?;
@@ -220,4 +246,47 @@ mod tests {
         );
         Ok(())
     }
+
+    // it seems the particular address can have signifcant varation in quote
+    // weirdly how.much.do.I.cost always returned the same when I ran this but my.address didn't???
+    // #[tokio::test]
+    // async fn costs() {
+    //     // let client = PostemClient::init(ConnectionType::Local).await.unwrap();
+    //     let client = PostemClient::init(ConnectionType::Antnet).await.unwrap();
+    //     let name = "how.much.do.I.cost";
+    //     // let name = "my.address";
+    //     let name_key = PostemName::create(name).unwrap().derive_key().unwrap();
+    //     let random_key = SecretKey::random();
+    //     let mut costs = vec![];
+    //     costs.push(
+    //         client
+    //             .client
+    //             .graph_entry_cost(&name_key.public_key())
+    //             .await
+    //             .unwrap(),
+    //     );
+    //     costs.push(
+    //         client
+    //             .client
+    //             .graph_entry_cost(&random_key.public_key())
+    //             .await
+    //             .unwrap(),
+    //     );
+    //     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    //     costs.push(
+    //         client
+    //             .client
+    //             .graph_entry_cost(&name_key.public_key())
+    //             .await
+    //             .unwrap(),
+    //     );
+    //     costs.push(
+    //         client
+    //             .client
+    //             .graph_entry_cost(&random_key.public_key())
+    //             .await
+    //             .unwrap(),
+    //     );
+    //     eprintln!("{:?}", costs);
+    // }
 }

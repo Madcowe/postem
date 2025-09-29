@@ -14,6 +14,8 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+use autonomi::client::PutError;
+use autonomi::client::quote::CostError;
 use autonomi::graph::GraphError;
 use autonomi::pointer::PointerError;
 
@@ -35,6 +37,10 @@ pub enum PostemError {
     FailedToGetWallet(String, String),
     #[error("{0}")]
     BLSError(String),
+    #[error("{0}")]
+    CostError(String),
+    #[error("{0}")]
+    PutError(String),
 }
 impl From<GraphError> for PostemError {
     fn from(e: GraphError) -> Self {
@@ -42,6 +48,7 @@ impl From<GraphError> for PostemError {
         PostemError::GraphEntryError(message)
     }
 }
+
 impl From<PointerError> for PostemError {
     fn from(e: PointerError) -> Self {
         let message = format!("{e}");
@@ -53,5 +60,19 @@ impl From<blsttc::Error> for PostemError {
     fn from(e: blsttc::Error) -> Self {
         let message = format!("{e}");
         PostemError::BLSError(message)
+    }
+}
+
+impl From<CostError> for PostemError {
+    fn from(e: CostError) -> Self {
+        let message = format!("{e}");
+        PostemError::CostError(message)
+    }
+}
+
+impl From<PutError> for PostemError {
+    fn from(e: PutError) -> Self {
+        let message = format!("{e}");
+        PostemError::PutError(message)
     }
 }

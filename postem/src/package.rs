@@ -15,8 +15,46 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// pub struct Package {
-//     address: GraphEntry,
-//     seal: Chunk, //(Contains encrypted hex of data map of payolad),
-//     payload: &Bytes,
-// }
+use autonomi::client::payment::PaymentOption;
+use autonomi::{Bytes, Chunk, GraphEntry, PublicKey, SecretKey};
+
+use crate::client::PostemClient;
+use crate::error::PostemError;
+
+/// A package to be deilvered consiting of it address which will be derived from the addressee
+/// the payload arbitary data in Bytes and the seal the encrypted hex of the datamap of the
+/// payload
+pub struct Package {
+    address: GraphEntry,
+    seal: Chunk, //(Contains encrypted hex of data map of payolad),
+    payload: Bytes,
+}
+impl PostemClient {
+    pub async fn create(
+        &self,
+        location: &SecretKey,
+        public_key: &PublicKey,
+        payload: Bytes,
+        payment_option: PaymentOption,
+    ) -> Result<Package, PostemError> {
+        let (data_cost, data_map) = self
+            .client
+            .data_put(payload.clone(), payment_option.clone())
+            .await?;
+        let seal = Chunk::new(Bytes::from(
+            public_key.encrypt(data_map.to_hex()).to_bytes(),
+        ));
+        let (data_map_cost, addr) = self.client.chunk_put(&seal, payment_option.clone()).await?;
+        let address = GraphEntry::new(
+            &location,
+            vec![public_key.clone()],
+            [0u8; 32],
+            vec![(public_key.clone(), addr.xorname().0)],
+        );
+        Ok(Package {
+            address,
+            seal,
+            payload,
+        })
+    }
+}
