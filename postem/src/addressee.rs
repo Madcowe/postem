@@ -86,13 +86,13 @@ impl PostemClient {
     pub async fn base_create(
         &self,
         address: SecretKey,
-        last_recieved_pk: &PublicKey,
+        last_received_pk: &PublicKey,
         payment_option: PaymentOption,
     ) -> Result<PostemBase, PostemError> {
         let index = DerivationIndex::random(&mut rand::thread_rng());
         let base = GraphEntry::new(
             &address,
-            vec![last_recieve_pk.clone()],
+            vec![last_received_pk.clone()],
             index.into_bytes(),
             vec![],
         );
@@ -104,44 +104,66 @@ impl PostemClient {
 }
 
 /// The addressee which can receive packages. Consisting of the address where the base is located,
-/// the base from which the location of pacakges sent to it can be derived, and last recieved a
-/// pointer to the latest valid package recieved. Received in this context means the owner of the
-/// address has followed the chain of pacakges from the base up to this point...there may well be
-/// pacakges that have been sent since they last checked beyond this location.
+/// the base from which the location of pacakges sent to it can be derived, and last received a
+/// pointer to the latest package received. Received in this context means the owner of the
+/// address has followed the chain of location from the base up to this point...there may well be
+/// pacakges that have been sent since they last checked beyond this location and the package
+/// at the location may not be valid.
 #[derive(Debug, PartialEq)]
 pub struct Addressee {
     address: PostemName,
     secret_key: SecretKey,
     base: PostemBase,
-    last_recieved: PointerAddress,
+    last_received: PointerAddress,
 }
 impl PostemClient {
     pub async fn addressee_create(
         &self,
         name: &str,
         payment_option: PaymentOption,
+        last_received_key: Option<SecretKey>,
     ) -> Result<Addressee, PostemError> {
         let address = PostemName::create(&name)?;
         let base_sk = address.derive_key()?;
         let base_pk = base_sk.public_key();
         let target = PointerTarget::GraphEntryAddress(GraphEntryAddress::new(base_pk));
-        let secret_key = SecretKey::random();
         if self.check_if_public_key_used(&base_pk).await? {
-            return Err(PostemError::NameAlreadyExists(name.to_string()));
+            return Err(PostemError::NameAlreadyExists(name.to_string(), None));
         }
-        let (_, pointer_address) = self
-            .client
-            .pointer_create(&secret_key, target, payment_option.clone())
-            .await?;
-        // what if name is taken between last recieved being created
-        let base = self
+        let (secret_key, pointer_address) = match last_received_key {
+            Some(secret_key) => {
+                self.client.pointer_update(&secret_key, target).await?;
+                (
+                    secret_key.clone(),
+                    PointerAddress::new(secret_key.public_key()),
+                )
+            }
+            None => {
+                let secret_key = SecretKey::random();
+                let (_, pointer_address) = self
+                    .client
+                    .pointer_create(&secret_key, target, payment_option.clone())
+                    .await?;
+                (secret_key, pointer_address)
+            }
+        };
+        let base = match self
             .base_create(base_sk, &secret_key.public_key(), payment_option.clone())
-            .await?;
+            .await
+        {
+            Ok(base) => base,
+            // Returns pointer owner so pointer could be reused with a different name if name taken
+            Err(PostemError::NameAlreadyExists(..)) => Err(PostemError::NameAlreadyExists(
+                name.to_string(),
+                Some(secret_key.clone()),
+            ))?,
+            Err(e) => Err(e)?,
+        };
         Ok(Addressee {
             address,
             secret_key,
             base,
-            last_recieved: pointer_address,
+            last_received: pointer_address,
         })
     }
 
@@ -235,14 +257,35 @@ mod tests {
         let estimate = client.addresses_cost(&name).await?;
         eprintln!("Estimate: {:?}", estimate);
         let addressee = client
-            .addressee_create(name, payment_option.clone())
+            .addressee_create(name, payment_option.clone(), None)
             .await?;
         assert_eq!(addressee.address, PostemName::create(&name)?);
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        let addressee_result = client.addressee_create(name, payment_option.clone()).await;
+        let addressee_result = client
+            .addressee_create(name, payment_option.clone(), None)
+            .await;
         assert_eq!(
             addressee_result,
-            Err(PostemError::NameAlreadyExists(name.to_string()))
+            Err(PostemError::NameAlreadyExists(name.to_string(), None))
+        );
+        // test with existing last_recieved
+        let target = PointerTarget::GraphEntryAddress(addressee.base.0.address());
+        let secret_key = SecretKey::random();
+        let (_, _) = client
+            .client
+            .pointer_create(&secret_key, target, payment_option.clone())
+            .await?;
+        let address = PostemName::create("my.address")?;
+        let base_sk = address.derive_key()?;
+        let base = client
+            .base_create(base_sk, &secret_key.public_key(), payment_option.clone())
+            .await;
+        assert_eq!(
+            base,
+            Err(PostemError::NameAlreadyExists(
+                addressee.base.0.address().to_hex(),
+                None
+            ))
         );
         Ok(())
     }

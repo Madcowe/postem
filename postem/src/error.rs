@@ -18,6 +18,7 @@ use autonomi::client::PutError;
 use autonomi::client::quote::CostError;
 use autonomi::graph::GraphError;
 use autonomi::pointer::PointerError;
+use blsttc::SecretKey;
 
 #[derive(Debug, thiserror::Error, PartialEq, Clone)]
 pub enum PostemError {
@@ -30,7 +31,7 @@ pub enum PostemError {
     #[error("Graph entry error: {0}")]
     GraphEntryError(String),
     #[error("An addressee already exists with name: {0}\nPlease choose another one.")]
-    NameAlreadyExists(String),
+    NameAlreadyExists(String, Option<SecretKey>),
     #[error("Pointer error: {0}")]
     PointerEntryError(String),
     #[error("Could not get funded wallet with key: |{0}| {1}")]
@@ -44,8 +45,13 @@ pub enum PostemError {
 }
 impl From<GraphError> for PostemError {
     fn from(e: GraphError) -> Self {
-        let message = format!("{e}");
-        PostemError::GraphEntryError(message)
+        match e {
+            GraphError::AlreadyExists(a) => PostemError::NameAlreadyExists(a.to_hex(), None),
+            _ => {
+                let message = format!("{e}");
+                PostemError::GraphEntryError(message)
+            }
+        }
     }
 }
 

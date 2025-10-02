@@ -26,7 +26,7 @@ use crate::error::PostemError;
 /// payload
 pub struct Package {
     address: GraphEntry,
-    seal: Chunk, //(Contains encrypted hex of data map of payolad),
+    seal: Chunk, // Contains encrypted hex of data map of payolad
     payload: Bytes,
 }
 impl PostemClient {
@@ -37,20 +37,27 @@ impl PostemClient {
         payload: Bytes,
         payment_option: PaymentOption,
     ) -> Result<Package, PostemError> {
-        let (data_cost, data_map) = self
+        let (_, data_map) = self
             .client
             .data_put(payload.clone(), payment_option.clone())
             .await?;
         let seal = Chunk::new(Bytes::from(
             public_key.encrypt(data_map.to_hex()).to_bytes(),
         ));
-        let (data_map_cost, addr) = self.client.chunk_put(&seal, payment_option.clone()).await?;
+        let (_, addr) = self.client.chunk_put(&seal, payment_option.clone()).await?;
         let address = GraphEntry::new(
             &location,
             vec![public_key.clone()],
             [0u8; 32],
             vec![(public_key.clone(), addr.xorname().0)],
         );
+        let (_, _) = self
+            .client
+            .graph_entry_put(address.clone(), payment_option.clone())
+            .await?;
+        // do we need to worry about what happes if ones of the puts works and some later ones don't
+        // in theory the first 2 it woudn't matter if they had already happend as content addressed
+        // do should we deal with those errors
         Ok(Package {
             address,
             seal,
