@@ -16,7 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 use autonomi::client::payment::PaymentOption;
-use autonomi::{Bytes, Chunk, GraphEntry, PublicKey, SecretKey};
+use autonomi::{AttoTokens, Bytes, Chunk, GraphEntry, PublicKey, SecretKey};
 
 use crate::client::PostemClient;
 use crate::error::PostemError;
@@ -24,44 +24,93 @@ use crate::error::PostemError;
 /// A package to be deilvered consiting of it address which will be derived from the addressee
 /// the payload arbitary data in Bytes and the seal the encrypted hex of the datamap of the
 /// payload
+#[derive(Debug, PartialEq)]
 pub struct Package {
     address: GraphEntry,
     seal: Chunk, // Contains encrypted hex of data map of payolad
     payload: Bytes,
+    cost: AttoTokens,
 }
 impl PostemClient {
-    pub async fn create(
+    pub async fn package_create(
         &self,
         location: &SecretKey,
         public_key: &PublicKey,
         payload: Bytes,
         payment_option: PaymentOption,
     ) -> Result<Package, PostemError> {
-        let (_, data_map) = self
+        let (payload_cost, data_map) = self
             .client
             .data_put(payload.clone(), payment_option.clone())
             .await?;
         let seal = Chunk::new(Bytes::from(
             public_key.encrypt(data_map.to_hex()).to_bytes(),
         ));
-        let (_, addr) = self.client.chunk_put(&seal, payment_option.clone()).await?;
+        let (seal_cost, addr) = self.client.chunk_put(&seal, payment_option.clone()).await?;
         let address = GraphEntry::new(
             &location,
             vec![public_key.clone()],
             [0u8; 32],
             vec![(public_key.clone(), addr.xorname().0)],
         );
-        let (_, _) = self
+        let (address_cost, _) = self
             .client
             .graph_entry_put(address.clone(), payment_option.clone())
             .await?;
-        // do we need to worry about what happes if ones of the puts works and some later ones don't
-        // in theory the first 2 it woudn't matter if they had already happend as content addressed
-        // do should we deal with those errors
+        let cost = payload_cost
+            .checked_add(seal_cost)
+            .unwrap_or(AttoTokens::zero())
+            .checked_add(address_cost)
+            .unwrap_or(AttoTokens::zero());
         Ok(Package {
             address,
             seal,
             payload,
+            cost,
         })
+    }
+}
+
+#[cfg(test)]
+
+mod tests {
+    use super::*;
+    use crate::client::ConnectionType;
+    use autonomi::{Bytes, GraphEntryAddress};
+
+    #[tokio::test]
+    #[ignore]
+    async fn package_create() -> Result<(), PostemError> {
+        let client = PostemClient::init(ConnectionType::Local).await?;
+        let payment_option = client.get_payment_option("").await?;
+        let public_key = SecretKey::random().public_key();
+        let location = SecretKey::random();
+        let payload = Bytes::from("Dear world");
+        let package = client
+            .package_create(
+                &location,
+                &public_key,
+                payload.clone(),
+                payment_option.clone(),
+            )
+            .await;
+        assert!(package.is_ok());
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let package = client
+            .package_create(
+                &location,
+                &public_key,
+                payload.clone(),
+                payment_option.clone(),
+            )
+            .await;
+        assert_eq!(
+            package,
+            Err(PostemError::NameAlreadyExists(
+                GraphEntryAddress::new(location.public_key()).to_hex(),
+                None
+            ))
+        );
+        Ok(())
     }
 }
