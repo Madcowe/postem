@@ -25,8 +25,8 @@ use blsttc::rand;
 
 use crate::{client::PostemClient, error::PostemError};
 
-/// Hex key of base (not) secret key of bored derive names
-const POSTEM_DERIVED_KEY_BASE: &str =
+/// Hex key of base (not) secret key of postem derived names
+pub const POSTEM_DERIVED_KEY_BASE: &str =
     "00000000000000000000000000000000000000000000000000000003C2BABF81";
 
 /// Characters that are not allowed in an addressee name
@@ -80,8 +80,14 @@ impl PostemClient {
 /// the first entry in parents is the (address/public key) of a pointer to the last received package
 /// the key pair used to create said pointer is also use for encrypton, the content is the
 /// derivation index that will be used to generate all subseqent package locations.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PostemBase(GraphEntry);
+impl PostemBase {
+    pub fn derivation_index(&self) -> DerivationIndex {
+        DerivationIndex::from_bytes(self.0.content)
+    }
+}
+
 impl PostemClient {
     pub async fn base_create(
         &self,
@@ -167,7 +173,7 @@ impl PostemClient {
         })
     }
 
-    pub async fn addresses_cost(&self, name: &str) -> Result<AttoTokens, PostemError> {
+    pub async fn addressee_cost(&self, name: &str) -> Result<AttoTokens, PostemError> {
         let address = PostemName::create(&name)?;
         let graph_key = address.derive_key()?.public_key();
         let graph_entry_cost = self.client.graph_entry_cost(&graph_key);

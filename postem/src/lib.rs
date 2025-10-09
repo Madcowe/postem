@@ -20,3 +20,6 @@ pub mod client;
 pub mod error;
 pub mod package;
 pub mod route;
+
+use crate::addressee::Addressee;
+use crate::package::Package;
