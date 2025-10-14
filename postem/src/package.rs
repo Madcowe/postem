@@ -16,7 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 use autonomi::client::payment::PaymentOption;
-use autonomi::{AttoTokens, Bytes, Chunk, GraphEntry, PublicKey, SecretKey};
+use autonomi::{AttoTokens, Bytes, Chunk, GraphEntry, GraphEntryAddress, PublicKey, SecretKey};
 
 use crate::client::PostemClient;
 use crate::error::PostemError;
@@ -27,9 +27,14 @@ use crate::error::PostemError;
 #[derive(Debug, PartialEq)]
 pub struct Package {
     address: GraphEntry,
-    seal: Chunk, // Contains encrypted hex of data map of payolad
+    seal: Chunk, // Contains encrypted hex of data map of payload
     payload: Bytes,
     cost: AttoTokens,
+}
+impl Package {
+    pub fn address(&self) -> GraphEntry {
+        self.address.clone()
+    }
 }
 impl PostemClient {
     pub async fn package_create(
@@ -49,8 +54,8 @@ impl PostemClient {
         let (seal_cost, addr) = self.client.chunk_put(&seal, payment_option.clone()).await?;
         let address = GraphEntry::new(
             &location,
-            vec![public_key.clone()],
-            [0u8; 32],
+            vec![],
+            location.to_bytes(), // location needs to be here so next one can be derived if jupmed to
             vec![(public_key.clone(), addr.xorname().0)],
         );
         let (address_cost, _) = self

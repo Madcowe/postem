@@ -34,7 +34,7 @@ pub const POSTEM_DERIVED_KEY_BASE: &str =
 const POSTEM_NAME_INVALID_CHARS: [char; 2] = [',', ';'];
 
 /// The unique name of an addressee, full stops (.) deliminate domains.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PostemName(Vec<String>);
 impl PostemName {
     pub fn create(name: &str) -> Result<PostemName, PostemError> {
@@ -85,6 +85,10 @@ pub struct PostemBase(GraphEntry);
 impl PostemBase {
     pub fn derivation_index(&self) -> DerivationIndex {
         DerivationIndex::from_bytes(self.0.content)
+    }
+
+    pub fn graph_entry(&self) -> GraphEntry {
+        self.0.clone()
     }
 }
 
@@ -187,6 +191,24 @@ impl PostemClient {
     }
 }
 
+impl Addressee {
+    pub fn base(&self) -> PostemBase {
+        self.base.clone()
+    }
+
+    pub fn last_received(&self) -> PointerAddress {
+        self.last_received
+    }
+
+    pub fn secret_key(&self) -> SecretKey {
+        self.secret_key.clone()
+    }
+
+    pub fn address(&self) -> PostemName {
+        self.address.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -260,7 +282,7 @@ mod tests {
         let client = PostemClient::init(ConnectionType::Local).await?;
         let payment_option = client.get_payment_option("").await?;
         let name = "my.address";
-        let estimate = client.addresses_cost(&name).await?;
+        let estimate = client.addressee_cost(&name).await?;
         eprintln!("Estimate: {:?}", estimate);
         let addressee = client
             .addressee_create(name, payment_option.clone(), None)
