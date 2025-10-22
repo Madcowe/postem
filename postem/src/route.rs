@@ -15,26 +15,22 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use autonomi::client::key_derivation::DerivationIndex;
-use autonomi::graph::GraphError;
 use autonomi::pointer::PointerTarget;
 use autonomi::{GraphEntryAddress, PointerAddress, SecretKey};
 
 use crate::addressee::PostemName;
-use crate::{addressee::PostemBase, client::PostemClient, error::PostemError, package::Package};
+use crate::{addressee::PostemBase, client::PostemClient, error::PostemError};
 
 #[derive(Clone, Debug)]
 pub struct Route {
     base: PostemBase,
     current_location: SecretKey,
-    index: DerivationIndex,
 }
 impl Route {
-    pub fn new(base: PostemBase, current_location: SecretKey, index: DerivationIndex) -> Route {
+    pub fn new(base: PostemBase, current_location: SecretKey) -> Route {
         Route {
             base,
             current_location,
-            index,
         }
     }
 
@@ -77,22 +73,12 @@ impl PostemClient {
                         current_location = location;
                     }
                 }
-                // {
-                //     Ok(graph_entry) => graph_entry,
-                //     Err(GraphError::Serialization(_)) => return Err(PostemError::EmptyLocation),
-                //     Err(GraphError::AlreadyExists(_)) => return Err(PostemError::BlockedLocation),
-                //     Err(e) => return Err(e.into()),
-                // };
                 // what errors happen if you try to get a graph entry and something else is there or nothing is there?
                 // GraphError:AlreadyExists for the former GraphEntry::Serialiation for the later
             };
         }
 
-        Ok(Route::new(
-            base.clone(),
-            current_location,
-            base.derivation_index().clone(),
-        ))
+        Ok(Route::new(base.clone(), current_location))
     }
 
     pub async fn location_used(&self, route: Route) -> Result<bool, PostemError> {
@@ -135,7 +121,7 @@ mod tests {
             ))
             .await?;
         let index = DerivationIndex::from_bytes(graph_entry.content);
-        let route = Route::new(addressee.base(), addressee.address().derive_key()?, index);
+        let route = Route::new(addressee.base(), addressee.address().derive_key()?);
         let next_location = client.location_get_available(route.clone()).await?;
         assert_eq!(
             next_location.to_hex(),
