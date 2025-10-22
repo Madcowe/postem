@@ -42,6 +42,12 @@ pub enum PostemError {
     CostError(String),
     #[error("{0}")]
     PutError(String),
+    #[error("Graph entry is not a valid postem address base")]
+    NotValidPostemBase(),
+    #[error("Tried to retrieve package from free location")]
+    EmptyLocation,
+    #[error("Tried to retrieve package from blocked location")]
+    BlockedLocation,
 }
 impl From<GraphError> for PostemError {
     fn from(e: GraphError) -> Self {

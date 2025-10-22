@@ -18,8 +18,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 use autonomi::client::payment::PaymentOption;
 use autonomi::{AttoTokens, Bytes, Chunk, GraphEntry, GraphEntryAddress, PublicKey, SecretKey};
 
+use crate::addressee::PostemName;
 use crate::client::PostemClient;
 use crate::error::PostemError;
+use crate::route::Route;
 
 /// A package to be deilvered consiting of it address which will be derived from the addressee
 /// the payload arbitary data in Bytes and the seal the encrypted hex of the datamap of the
@@ -73,6 +75,15 @@ impl PostemClient {
             payload,
             cost,
         })
+    }
+
+    pub async fn package_post(
+        &self,
+        addresss: PostemName,
+        content: Bytes,
+        payment_option: PaymentOption,
+    ) -> Result<(), PostemError> {
+        Ok(())
     }
 }
 

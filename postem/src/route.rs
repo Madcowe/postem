@@ -16,8 +16,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 use autonomi::client::key_derivation::DerivationIndex;
-use autonomi::{GraphEntryAddress, SecretKey};
+use autonomi::graph::GraphError;
+use autonomi::pointer::PointerTarget;
+use autonomi::{GraphEntryAddress, PointerAddress, SecretKey};
 
+use crate::addressee::PostemName;
 use crate::{addressee::PostemBase, client::PostemClient, error::PostemError, package::Package};
 
 #[derive(Clone, Debug)]
@@ -45,6 +48,53 @@ impl Route {
 }
 
 impl PostemClient {
+    pub async fn route_get(
+        &self,
+        name: PostemName,
+        derive_from_base: bool,
+    ) -> Result<Route, PostemError> {
+        let address = name.derive_key()?;
+        let graph_entry_address = GraphEntryAddress::new(address.public_key());
+        let base =
+            PostemBase::from_graph_entry(self.client.graph_entry_get(&graph_entry_address).await?)?;
+        let public_key = base.public_key();
+        let mut current_location = address;
+        if !derive_from_base {
+            let last_received = self
+                .client
+                .pointer_get(&PointerAddress::new(public_key))
+                .await?;
+            // if not pointing at base goto last received and if that is valid use at start location
+            let current_graph_entry = if last_received.target().xorname()
+                != PointerTarget::GraphEntryAddress(graph_entry_address).xorname()
+                && let PointerTarget::GraphEntryAddress(last_received_address) =
+                    PointerTarget::GraphEntryAddress(graph_entry_address)
+            {
+                if let Ok(current_graph_entry) =
+                    self.client.graph_entry_get(&last_received_address).await
+                {
+                    if let Ok(location) = SecretKey::from_bytes(current_graph_entry.content) {
+                        current_location = location;
+                    }
+                }
+                // {
+                //     Ok(graph_entry) => graph_entry,
+                //     Err(GraphError::Serialization(_)) => return Err(PostemError::EmptyLocation),
+                //     Err(GraphError::AlreadyExists(_)) => return Err(PostemError::BlockedLocation),
+                //     Err(e) => return Err(e.into()),
+                // };
+                // what errors happen if you try to get a graph entry and something else is there or nothing is there?
+                // GraphError:AlreadyExists for the former GraphEntry::Serialiation for the later
+            };
+        }
+
+        Ok(Route::new(
+            base.clone(),
+            current_location,
+            base.derivation_index().clone(),
+        ))
+    }
+
     pub async fn location_used(&self, route: Route) -> Result<bool, PostemError> {
         Ok(self
             .check_if_public_key_used(&route.current_location.public_key())
@@ -66,7 +116,7 @@ mod tests {
     use autonomi::{Bytes, GraphEntryAddress, Pointer};
 
     use super::*;
-    use crate::{addressee, client::ConnectionType};
+    use crate::client::ConnectionType;
 
     #[tokio::test]
     #[ignore]

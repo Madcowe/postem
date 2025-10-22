@@ -83,8 +83,24 @@ impl PostemClient {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PostemBase(GraphEntry);
 impl PostemBase {
+    pub fn from_graph_entry(graph_entry: GraphEntry) -> Result<PostemBase, PostemError> {
+        match graph_entry.parents.first() {
+            None => return Err(PostemError::NotValidPostemBase()),
+            Some(_) => Ok(PostemBase(graph_entry)),
+        }
+    }
+
     pub fn derivation_index(&self) -> DerivationIndex {
         DerivationIndex::from_bytes(self.0.content)
+    }
+
+    /// This is both the key used for encrypton and to create the address of last received pointer
+    pub fn public_key(&self) -> PublicKey {
+        self.0
+            .parents
+            .first()
+            .expect("Postem base should always have public key in parents first entry")
+            .clone()
     }
 
     pub fn graph_entry(&self) -> GraphEntry {
