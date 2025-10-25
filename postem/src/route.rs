@@ -39,7 +39,10 @@ impl Route {
         self.current_location = self
             .current_location
             .derive_child(&self.base.derivation_index().into_bytes());
-        eprintln!("{:?}", self.current_location.to_hex());
+    }
+
+    pub fn base(&self) -> PostemBase {
+        self.base.clone()
     }
 }
 
@@ -99,6 +102,7 @@ impl PostemClient {
 #[cfg(test)]
 mod tests {
 
+    use autonomi::client::key_derivation::DerivationIndex;
     use autonomi::{Bytes, GraphEntryAddress, Pointer};
 
     use super::*;
@@ -168,5 +172,38 @@ mod tests {
         let next_location = client.location_get_available(route.clone()).await.unwrap();
         assert_eq!(next_location.to_hex(), location_after_next.to_hex());
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_route() {
+        // Assumes run from freshly started local client
+        let client = PostemClient::init(ConnectionType::Local).await.unwrap();
+        let payment_option = client.get_payment_option("").await.unwrap();
+        let addressee = client
+            .addressee_create("test.address", payment_option.clone(), None)
+            .await
+            .unwrap();
+        let route = client.route_get(addressee.address(), false).await.unwrap();
+        assert_eq!(
+            route.current_location.to_bytes(),
+            addressee.address().derive_key().unwrap().to_bytes()
+        );
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        // test currentl_location after adding a package
+        // let next_location = client.location_get_available(route).await.unwrap();
+        let package = client
+            .package_post(addressee.address(), Bytes::from("Hello"), payment_option)
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let route = client.route_get(addressee.address(), false).await.unwrap();
+        // need to make recieveing method that updates last_received before further tests
+        // assert_eq!(route.current_location.to_bytes(), package.address().content);
+        assert_eq!(
+            route.current_location.to_bytes(),
+            addressee.address().derive_key().unwrap().to_bytes()
+        );
+        // after adding a pointer (ie not valid pacakge)
+        // after adding another package.
     }
 }

@@ -127,6 +127,14 @@ impl PostemClient {
             .await?;
         Ok(PostemBase(base))
     }
+
+    pub async fn base_get(&self, name: PostemName) -> Result<PostemBase, PostemError> {
+        PostemBase::from_graph_entry(
+            self.client
+                .graph_entry_get(&GraphEntryAddress::new(name.derive_key()?.public_key()))
+                .await?,
+        )
+    }
 }
 
 /// The addressee which can receive packages. Consisting of the address where the base is located,

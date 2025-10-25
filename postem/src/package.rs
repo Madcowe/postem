@@ -82,8 +82,12 @@ impl PostemClient {
         addresss: PostemName,
         content: Bytes,
         payment_option: PaymentOption,
-    ) -> Result<(), PostemError> {
-        Ok(())
+    ) -> Result<Package, PostemError> {
+        let route = self.route_get(addresss, false).await?;
+        let base = route.base();
+        let location = self.location_get_available(route).await?;
+        self.package_create(&location, &base.public_key(), content, payment_option)
+            .await
     }
 }
 
