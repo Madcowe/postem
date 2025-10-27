@@ -19,6 +19,7 @@ use autonomi::pointer::PointerTarget;
 use autonomi::{GraphEntryAddress, PointerAddress, SecretKey};
 
 use crate::addressee::PostemName;
+use crate::package::Package;
 use crate::{addressee::PostemBase, client::PostemClient, error::PostemError};
 
 #[derive(Clone, Debug)]
@@ -90,6 +91,10 @@ impl PostemClient {
             .await?)
     }
 
+    // pub async fn location_get_pacakge(&self, route: &Route) -> Result<Package, PostemError> {
+    //     let
+    // }
+
     /// Returns the next location on the route that has not been used, so a package may be posted
     pub async fn location_get_available(&self, mut route: Route) -> Result<SecretKey, PostemError> {
         while self.location_used(route.clone()).await? {
@@ -135,7 +140,7 @@ mod tests {
                 .derive_child(&index.into_bytes())
                 .to_hex()
         );
-        let package = client
+        let (package, _) = client
             .package_create(
                 &next_location,
                 graph_entry
@@ -191,7 +196,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         // test currentl_location after adding a package
         // let next_location = client.location_get_available(route).await.unwrap();
-        let package = client
+        let (package, _) = client
             .package_post(addressee.address(), Bytes::from("Hello"), payment_option)
             .await
             .unwrap();

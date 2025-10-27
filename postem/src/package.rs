@@ -16,12 +16,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 use autonomi::client::payment::PaymentOption;
-use autonomi::{AttoTokens, Bytes, Chunk, GraphEntry, GraphEntryAddress, PublicKey, SecretKey};
+use autonomi::{AttoTokens, Bytes, Chunk, GraphEntry, PublicKey, SecretKey};
 
 use crate::addressee::PostemName;
 use crate::client::PostemClient;
 use crate::error::PostemError;
-use crate::route::Route;
 
 /// A package to be deilvered consiting of it address which will be derived from the addressee
 /// the payload arbitary data in Bytes and the seal the encrypted hex of the datamap of the
@@ -31,7 +30,7 @@ pub struct Package {
     address: GraphEntry,
     seal: Chunk, // Contains encrypted hex of data map of payload
     payload: Bytes,
-    cost: AttoTokens,
+    // cost: AttoTokens,
 }
 impl Package {
     pub fn address(&self) -> GraphEntry {
@@ -45,7 +44,7 @@ impl PostemClient {
         public_key: &PublicKey,
         payload: Bytes,
         payment_option: PaymentOption,
-    ) -> Result<Package, PostemError> {
+    ) -> Result<(Package, AttoTokens), PostemError> {
         let (payload_cost, data_map) = self
             .client
             .data_put(payload.clone(), payment_option.clone())
@@ -69,12 +68,15 @@ impl PostemClient {
             .unwrap_or(AttoTokens::zero())
             .checked_add(address_cost)
             .unwrap_or(AttoTokens::zero());
-        Ok(Package {
-            address,
-            seal,
-            payload,
+        Ok((
+            Package {
+                address,
+                seal,
+                payload,
+                // cost,
+            },
             cost,
-        })
+        ))
     }
 
     pub async fn package_post(
@@ -82,7 +84,7 @@ impl PostemClient {
         addresss: PostemName,
         content: Bytes,
         payment_option: PaymentOption,
-    ) -> Result<Package, PostemError> {
+    ) -> Result<(Package, AttoTokens), PostemError> {
         let route = self.route_get(addresss, false).await?;
         let base = route.base();
         let location = self.location_get_available(route).await?;

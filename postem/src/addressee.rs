@@ -22,6 +22,8 @@ use autonomi::{
     AttoTokens, Bytes, GraphEntry, GraphEntryAddress, PointerAddress, PublicKey, SecretKey,
 };
 use blsttc::rand;
+use blsttc::rand::seq::index;
+use blsttc::serde::Serialize;
 
 use crate::{client::PostemClient, error::PostemError};
 
@@ -105,6 +107,29 @@ impl PostemBase {
 
     pub fn graph_entry(&self) -> GraphEntry {
         self.0.clone()
+    }
+
+    /// If there is a fork on the graph entry of a base this function arbitarily but
+    /// determalistically picks ones so there is always only one valid addressee of a postem
+    /// address...as I don't know if the order of forks in the vector would always be the same
+    /// if a user is unfortunate enough for this to have happened they may end up paying for
+    /// a non functinal address if this resolves to a differnt graph then the one they created
+    pub fn resolve_fork(forks: Vec<GraphEntry>) -> GraphEntry {
+        let mut public_key_bytes = [0u8; 48];
+        let mut index_to_use = 0;
+        for (index, fork) in forks.iter().enumerate() {
+            if let Some(public_key) = fork.parents.first() {
+                // find the highest value of first entry of parents
+                if public_key.to_bytes() > public_key_bytes {
+                    public_key_bytes = public_key.to_bytes();
+                    index_to_use = index;
+                }
+            }
+        }
+        forks
+            .get(index_to_use)
+            .expect("Fork error should always return a non empty vector")
+            .clone()
     }
 }
 
