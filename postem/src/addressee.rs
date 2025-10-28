@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use autonomi::client::key_derivation::DerivationIndex;
 use autonomi::client::payment::PaymentOption;
+use autonomi::graph::GraphError;
 use autonomi::pointer::PointerTarget;
 use autonomi::{
     AttoTokens, Bytes, GraphEntry, GraphEntryAddress, PointerAddress, PublicKey, SecretKey,
@@ -109,6 +110,10 @@ impl PostemBase {
         self.0.clone()
     }
 
+    pub fn graph_entry_address(&self) -> GraphEntryAddress {
+        self.0.address()
+    }
+
     /// If there is a fork on the graph entry of a base this function arbitarily but
     /// determalistically picks ones so there is always only one valid addressee of a postem
     /// address...as I don't know if the order of forks in the vector would always be the same
@@ -155,9 +160,15 @@ impl PostemClient {
 
     pub async fn base_get(&self, name: PostemName) -> Result<PostemBase, PostemError> {
         PostemBase::from_graph_entry(
-            self.client
+            match self
+                .client
                 .graph_entry_get(&GraphEntryAddress::new(name.derive_key()?.public_key()))
-                .await?,
+                .await
+            {
+                Ok(graph_entry) => graph_entry,
+                Err(GraphError::Fork(forks)) => PostemBase::resolve_fork(forks),
+                Err(e) => return Err(e.into()),
+            },
         )
     }
 }

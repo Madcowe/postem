@@ -19,7 +19,6 @@ use autonomi::pointer::PointerTarget;
 use autonomi::{GraphEntryAddress, PointerAddress, SecretKey};
 
 use crate::addressee::PostemName;
-use crate::package::Package;
 use crate::{addressee::PostemBase, client::PostemClient, error::PostemError};
 
 #[derive(Clone, Debug)]
@@ -53,12 +52,14 @@ impl PostemClient {
         name: PostemName,
         derive_from_base: bool,
     ) -> Result<Route, PostemError> {
-        let address = name.derive_key()?;
-        let graph_entry_address = GraphEntryAddress::new(address.public_key());
-        let base =
-            PostemBase::from_graph_entry(self.client.graph_entry_get(&graph_entry_address).await?)?;
+        // let address = name.derive_key()?;
+        // let graph_entry_address = GraphEntryAddress::new(address.public_key());
+        // let base =
+        //     PostemBase::from_graph_entry(self.client.graph_entry_get(&graph_entry_address).await?)?;
+        let base = self.base_get(name.clone()).await?;
+        let graph_entry_address = base.graph_entry_address();
         let public_key = base.public_key();
-        let mut current_location = address;
+        let mut current_location = name.derive_key()?;
         if !derive_from_base {
             let last_received = self
                 .client
@@ -108,6 +109,7 @@ impl PostemClient {
 mod tests {
 
     use autonomi::client::key_derivation::DerivationIndex;
+    use autonomi::graph::GraphError;
     use autonomi::{Bytes, GraphEntryAddress, Pointer};
 
     use super::*;
@@ -185,7 +187,7 @@ mod tests {
         let client = PostemClient::init(ConnectionType::Local).await.unwrap();
         let payment_option = client.get_payment_option("").await.unwrap();
         let addressee = client
-            .addressee_create("test.address", payment_option.clone(), None)
+            .addressee_create("another.test.address", payment_option.clone(), None)
             .await
             .unwrap();
         let route = client.route_get(addressee.address(), false).await.unwrap();
@@ -211,4 +213,20 @@ mod tests {
         // after adding a pointer (ie not valid pacakge)
         // after adding another package.
     }
+
+    // #[tokio::test]
+    // #[ignore]
+    // async fn test_forked_base() {
+    //     // only run after previous two test cause a fork
+    //     let client = PostemClient::init(ConnectionType::Local).await.unwrap();
+    //     let payment_option = client.get_payment_option("").await.unwrap();
+    //     let name = PostemName::create("test.address").unwrap();
+    //     let route = client.route_get(name, false).await.unwrap();
+    //     eprintln!("{}", route.base.public_key().to_hex());
+    //     let graph_result = client
+    //         .client
+    //         .graph_entry_get(&route.base.graph_entry_address())
+    //         .await;
+    //     eprintln!("{:?}", graph_result);
+    // }
 }
