@@ -14,6 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+use autonomi::client::GetError;
 use autonomi::client::PutError;
 use autonomi::client::quote::CostError;
 use autonomi::graph::GraphError;
@@ -48,6 +49,10 @@ pub enum PostemError {
     EmptyLocation,
     #[error("Tried to retrieve package from blocked location")]
     BlockedLocation,
+    #[error("Package invalid as has no retrievable seal")]
+    MissingSeal,
+    #[error("Get error: {0}")]
+    GetError(String),
 }
 impl From<GraphError> for PostemError {
     fn from(e: GraphError) -> Self {
@@ -68,6 +73,12 @@ impl From<PointerError> for PostemError {
     }
 }
 
+impl From<GetError> for PostemError {
+    fn from(e: GetError) -> Self {
+        let message = format!("{e}");
+        PostemError::GetError(message)
+    }
+}
 impl From<blsttc::Error> for PostemError {
     fn from(e: blsttc::Error) -> Self {
         let message = format!("{e}");

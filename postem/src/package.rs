@@ -16,11 +16,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 use autonomi::client::payment::PaymentOption;
-use autonomi::{AttoTokens, Bytes, Chunk, GraphEntry, PublicKey, SecretKey};
+use autonomi::{AttoTokens, Bytes, Chunk, ChunkAddress, GraphEntry, PublicKey, SecretKey, XorName};
 
 use crate::addressee::PostemName;
 use crate::client::PostemClient;
 use crate::error::PostemError;
+
+#[derive(Debug, PartialEq)]
+pub enum PackageState {
+    Open,
+    Sealed,
+}
 
 /// A package to be deilvered consiting of it address which will be derived from the addressee
 /// the payload arbitary data in Bytes and the seal the encrypted hex of the datamap of the
@@ -28,13 +34,20 @@ use crate::error::PostemError;
 #[derive(Debug, PartialEq)]
 pub struct Package {
     address: GraphEntry,
-    seal: Chunk, // Contains encrypted hex of data map of payload
-    payload: Bytes,
-    // cost: AttoTokens,
+    seal: Chunk,            // Contains encrypted hex of data map of payload
+    payload: Option<Bytes>, // a retrieved package that is yet to be open will be None
 }
 impl Package {
     pub fn address(&self) -> GraphEntry {
         self.address.clone()
+    }
+
+    pub fn status(&self) -> PackageState {
+        if self.payload.is_some() {
+            PackageState::Open
+        } else {
+            PackageState::Sealed
+        }
     }
 }
 impl PostemClient {
@@ -72,7 +85,7 @@ impl PostemClient {
             Package {
                 address,
                 seal,
-                payload,
+                payload: Some(payload),
                 // cost,
             },
             cost,
@@ -81,15 +94,38 @@ impl PostemClient {
 
     pub async fn package_post(
         &self,
-        addresss: PostemName,
+        addressee: PostemName,
         content: Bytes,
         payment_option: PaymentOption,
     ) -> Result<(Package, AttoTokens), PostemError> {
-        let route = self.route_get(addresss, false).await?;
+        let route = self.route_get(addressee, false).await?;
         let base = route.base();
         let location = self.location_get_available(route).await?;
         self.package_create(&location, &base.public_key(), content, payment_option)
             .await
+    }
+
+    /// Uses the address graph entry to retrieve the encryped data map and return a sealed package
+    /// plus the public key which will only be valid if it matches the bases public key
+    pub async fn package_get(
+        &self,
+        address: GraphEntry,
+    ) -> Result<(Package, PublicKey), PostemError> {
+        if let Some((public_key, seal_xor)) = address.descendants.first() {
+            let seal = self
+                .client
+                .chunk_get(&ChunkAddress::new(XorName::from_content(seal_xor)))
+                .await?;
+            return Ok((
+                Package {
+                    address: address.clone(),
+                    seal,
+                    payload: None,
+                },
+                *public_key,
+            ));
+        }
+        Err(PostemError::MissingSeal)
     }
 }
 

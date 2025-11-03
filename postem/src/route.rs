@@ -15,10 +15,12 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use autonomi::graph::GraphError;
 use autonomi::pointer::PointerTarget;
-use autonomi::{GraphEntryAddress, PointerAddress, SecretKey};
+use autonomi::{GraphEntry, GraphEntryAddress, PointerAddress, SecretKey};
 
 use crate::addressee::PostemName;
+use crate::package::Package;
 use crate::{addressee::PostemBase, client::PostemClient, error::PostemError};
 
 #[derive(Clone, Debug)]
@@ -52,10 +54,6 @@ impl PostemClient {
         name: PostemName,
         derive_from_base: bool,
     ) -> Result<Route, PostemError> {
-        // let address = name.derive_key()?;
-        // let graph_entry_address = GraphEntryAddress::new(address.public_key());
-        // let base =
-        //     PostemBase::from_graph_entry(self.client.graph_entry_get(&graph_entry_address).await?)?;
         let base = self.base_get(name.clone()).await?;
         let graph_entry_address = base.graph_entry_address();
         let public_key = base.public_key();
@@ -66,10 +64,11 @@ impl PostemClient {
                 .pointer_get(&PointerAddress::new(public_key))
                 .await?;
             // if not pointing at base goto last received and if that is valid use at start location
-            let current_graph_entry = if last_received.target().xorname()
+            // let current_graph_entry =
+            if last_received.target().xorname()
                 != PointerTarget::GraphEntryAddress(graph_entry_address).xorname()
                 && let PointerTarget::GraphEntryAddress(last_received_address) =
-                    PointerTarget::GraphEntryAddress(graph_entry_address)
+                    last_received.target()
             {
                 if let Ok(current_graph_entry) =
                     self.client.graph_entry_get(&last_received_address).await
@@ -92,8 +91,27 @@ impl PostemClient {
             .await?)
     }
 
-    // pub async fn location_get_pacakge(&self, route: &Route) -> Result<Package, PostemError> {
-    //     let
+    /// If graph has forks returns all forks as they if valid can all be considered as packages
+    /// hence wraps succesful return in vector
+    pub async fn location_get_package_addresses(
+        &self,
+        route: &Route,
+    ) -> Result<Vec<GraphEntry>, PostemError> {
+        match self
+            .client
+            .graph_entry_get(&GraphEntryAddress::new(route.current_location.public_key()))
+            .await
+        {
+            Ok(graph_entry) => Ok(vec![graph_entry]),
+            Err(GraphError::Fork(forks)) => Ok(forks),
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    // pub async fn location_get_packages(&self, route: &Route) -> Result<Vec<Package>, PostemError> {
+    //     let addresses = self.location_get_packages(route).await?;
+    //     let packages = Vec::new();
+    //     for address in addresses {}
     // }
 
     /// Returns the next location on the route that has not been used, so a package may be posted
@@ -114,6 +132,7 @@ mod tests {
 
     use super::*;
     use crate::client::ConnectionType;
+    use crate::package;
 
     #[tokio::test]
     #[ignore]
@@ -192,8 +211,8 @@ mod tests {
             .unwrap();
         let route = client.route_get(addressee.address(), false).await.unwrap();
         assert_eq!(
-            route.current_location.to_bytes(),
-            addressee.address().derive_key().unwrap().to_bytes()
+            route.current_location.to_hex(),
+            addressee.address().derive_key().unwrap().to_hex()
         );
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         // test currentl_location after adding a package
@@ -205,11 +224,12 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let route = client.route_get(addressee.address(), false).await.unwrap();
         // need to make recieveing method that updates last_received before further tests
+        // next 2 assert should work once updating last_received is implemented
         // assert_eq!(route.current_location.to_bytes(), package.address().content);
-        assert_eq!(
-            route.current_location.to_bytes(),
-            addressee.address().derive_key().unwrap().to_bytes()
-        );
+        // assert_eq!(
+        //     route.current_location.public_key().to_hex(),
+        //     package.address().owner.to_hex() // addressee.address().derive_key().unwrap().to_bytes()
+        // );
         // after adding a pointer (ie not valid pacakge)
         // after adding another package.
     }
