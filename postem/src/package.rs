@@ -31,7 +31,7 @@ pub enum PackageState {
 /// A package to be deilvered consiting of it address which will be derived from the addressee
 /// the payload arbitary data in Bytes and the seal the encrypted hex of the datamap of the
 /// payload
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Package {
     address: GraphEntry,
     seal: Chunk,            // Contains encrypted hex of data map of payload
@@ -48,6 +48,13 @@ impl Package {
         } else {
             PackageState::Sealed
         }
+    }
+
+    pub fn seal(&self) -> Chunk {
+        self.seal.clone()
+    }
+    pub fn payload(&self) -> Option<Bytes> {
+        self.payload.clone()
     }
 }
 impl PostemClient {

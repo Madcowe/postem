@@ -15,12 +15,14 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use std::ascii::AsciiExt;
+
 use autonomi::graph::GraphError;
 use autonomi::pointer::PointerTarget;
 use autonomi::{GraphEntry, GraphEntryAddress, PointerAddress, SecretKey};
 
 use crate::addressee::PostemName;
-use crate::package::Package;
+use crate::package::{self, Package};
 use crate::{addressee::PostemBase, client::PostemClient, error::PostemError};
 
 #[derive(Clone, Debug)]
@@ -85,7 +87,7 @@ impl PostemClient {
         Ok(Route::new(base.clone(), current_location))
     }
 
-    pub async fn location_used(&self, route: Route) -> Result<bool, PostemError> {
+    pub async fn location_used(&self, route: &Route) -> Result<bool, PostemError> {
         Ok(self
             .check_if_public_key_used(&route.current_location.public_key())
             .await?)
@@ -108,15 +110,46 @@ impl PostemClient {
         }
     }
 
-    // pub async fn location_get_packages(&self, route: &Route) -> Result<Vec<Package>, PostemError> {
-    //     let addresses = self.location_get_packages(route).await?;
-    //     let packages = Vec::new();
-    //     for address in addresses {}
-    // }
+    // potentially you might want to return enum an that could be a package or not valid along with
+    // address so an application could know about the invalid locations
+    pub async fn location_get_packages(
+        &self,
+        route: &Route,
+    ) -> Result<Vec<(Package, SecretKey)>, PostemError> {
+        let addresses = self.location_get_package_addresses(route).await?;
+        let mut packages = Vec::new();
+        for address in addresses {
+            if let Ok((package, public_key)) = self.package_get(address).await {
+                // Check if package is valid as will have public_key of addressee
+                if route.base.public_key() == public_key {
+                    packages.push((package, route.current_location.clone()));
+                }
+            }
+        }
+        Ok(packages)
+    }
+
+    /// Returns all packages along the route, wether this is everythig or just since last received
+    /// depends on the value of derive_from_base when rohte_get was called
+    /// note the route's current location is modifed as the route is traversed
+    /// you probably don;t want to call this on a route that has already called another function
+    /// that also does this (eg location_get_available) as you will miss most pacakges
+    pub async fn route_get_pacakges(
+        &self,
+        mut route: Route,
+    ) -> Result<Vec<(Package, SecretKey)>, PostemError> {
+        let mut packages = Vec::new();
+        while self.location_used(&route).await? {
+            packages.append(&mut self.location_get_packages(&route).await?);
+            route.next();
+        }
+        Ok(packages)
+    }
 
     /// Returns the next location on the route that has not been used, so a package may be posted
+    /// note the route current location is modified as the route is traversed
     pub async fn location_get_available(&self, mut route: Route) -> Result<SecretKey, PostemError> {
-        while self.location_used(route.clone()).await? {
+        while self.location_used(&route).await? {
             route.next();
         }
         Ok(route.current_location)
@@ -127,12 +160,10 @@ impl PostemClient {
 mod tests {
 
     use autonomi::client::key_derivation::DerivationIndex;
-    use autonomi::graph::GraphError;
     use autonomi::{Bytes, GraphEntryAddress, Pointer};
 
     use super::*;
     use crate::client::ConnectionType;
-    use crate::package;
 
     #[tokio::test]
     #[ignore]

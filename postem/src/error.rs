@@ -53,6 +53,10 @@ pub enum PostemError {
     MissingSeal,
     #[error("Get error: {0}")]
     GetError(String),
+    #[error("Cannot decrypt package seal")]
+    CannotDecrypt,
+    #[error("Cannot not get payload from decrypted seal")]
+    CannotGetPayload,
 }
 impl From<GraphError> for PostemError {
     fn from(e: GraphError) -> Self {

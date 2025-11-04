@@ -23,10 +23,9 @@ use autonomi::{
     AttoTokens, Bytes, GraphEntry, GraphEntryAddress, PointerAddress, PublicKey, SecretKey,
 };
 use blsttc::rand;
-use blsttc::rand::seq::index;
-use blsttc::serde::Serialize;
+use blsttc::Ciphertext;
 
-use crate::{client::PostemClient, error::PostemError};
+use crate::{Package, client::PostemClient, error::PostemError};
 
 /// Hex key of base (not) secret key of postem derived names
 pub const POSTEM_DERIVED_KEY_BASE: &str =
@@ -249,6 +248,39 @@ impl PostemClient {
             .unwrap_or(AttoTokens::zero());
         Ok(cost)
     }
+
+    pub async fn addressee_get_packages(
+        &mut self,
+        addressee: &mut Addressee,
+        derive_from_base: bool,
+    ) -> Result<Vec<Package>, PostemError> {
+        let route = self
+            .route_get(addressee.address(), derive_from_base)
+            .await?;
+        let packages = self.route_get_pacakges(route).await?;
+        if let Some((_, last_location)) = packages.last() {
+            let target = PointerTarget::GraphEntryAddress(GraphEntryAddress::new(
+                last_location.public_key(),
+            ));
+            self.client
+                .pointer_update(&addressee.secret_key, target)
+                .await?;
+        }
+        Ok(packages.iter().map(|p| p.0.clone()).collect())
+    }
+    
+    pub async fn open_package(&self, package: &mut Package, secret_key: SecretKey) -> Result<(), PostemError> {
+        // Maybe in the event of the error from Cipertext::from_bytes should also return CannotDecrypt
+        let data_map = match secret_key.decrypt(&Ciphertext::from_bytes(package.seal().value())?) {
+            Some(data_map) =>  data_map
+            None => return Err(PostemError::CannotDecrypt) 
+        }
+        // let payload = match self.client.data_get(data_map).await {
+        //     Ok(payload) = payload,
+        //     Err(_) => return Err(PostemError::CannotGetPayload),
+        // }
+        Ok(())
+    }
 }
 
 impl Addressee {
@@ -266,6 +298,14 @@ impl Addressee {
 
     pub fn address(&self) -> PostemName {
         self.address.clone()
+    }
+
+
+    pub fn open_packages(&self, packages: &mut Vec<Package>) -> Result<(), PostemError> {
+        // for package in packages {
+
+        // }
+        Ok(())
     }
 }
 
