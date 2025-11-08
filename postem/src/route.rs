@@ -129,7 +129,7 @@ impl PostemClient {
         Ok(packages)
     }
 
-    /// Returns all packages along the route, wether this is everythig or just since last received
+    /// Returns all packages along the route, whether this is everythig or just since last received
     /// depends on the value of derive_from_base when rohte_get was called
     /// note the route's current location is modifed as the route is traversed
     /// you probably don;t want to call this on a route that has already called another function

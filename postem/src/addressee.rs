@@ -15,15 +15,16 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use autonomi::client::data_types::chunk::DataMapChunk;
 use autonomi::client::key_derivation::DerivationIndex;
 use autonomi::client::payment::PaymentOption;
 use autonomi::graph::GraphError;
 use autonomi::pointer::PointerTarget;
 use autonomi::{
-    AttoTokens, Bytes, GraphEntry, GraphEntryAddress, PointerAddress, PublicKey, SecretKey,
+    AttoTokens, Bytes, Chunk, GraphEntry, GraphEntryAddress, PointerAddress, PublicKey, SecretKey,
 };
-use blsttc::rand;
 use blsttc::Ciphertext;
+use blsttc::rand;
 
 use crate::{Package, client::PostemClient, error::PostemError};
 
@@ -268,18 +269,39 @@ impl PostemClient {
         }
         Ok(packages.iter().map(|p| p.0.clone()).collect())
     }
-    
-    pub async fn open_package(&self, package: &mut Package, secret_key: SecretKey) -> Result<(), PostemError> {
+
+    pub async fn open_package(
+        &self,
+        package: &Package,
+        secret_key: SecretKey,
+    ) -> Result<Package, PostemError> {
         // Maybe in the event of the error from Cipertext::from_bytes should also return CannotDecrypt
+        // !!! Needs testing as not sure this is correctly converting back to orginal data map
         let data_map = match secret_key.decrypt(&Ciphertext::from_bytes(package.seal().value())?) {
-            Some(data_map) =>  data_map
-            None => return Err(PostemError::CannotDecrypt) 
+            Some(decrypted_data) => DataMapChunk::from(Chunk::new(Bytes::from(decrypted_data))),
+            None => return Err(PostemError::CannotDecrypt),
+        };
+        let payload = match self.client.data_get(&data_map).await {
+            Ok(payload) => payload,
+            Err(_) => return Err(PostemError::CannotGetPayload),
+        };
+        Ok(package.clone_with_new_payload(payload))
+    }
+
+    pub async fn open_packages(
+        &self,
+        packages: &Vec<Package>,
+        secret_key: SecretKey,
+    ) -> Result<Vec<Package>, PostemError> {
+        let mut open_packages = vec![];
+        for package in packages {
+            match self.open_package(package, secret_key.clone()).await {
+                Err(PostemError::CannotDecrypt | PostemError::CannotGetPayload) => (),
+                Ok(open_package) => open_packages.push(open_package),
+                Err(e) => return Err(e),
+            }
         }
-        // let payload = match self.client.data_get(data_map).await {
-        //     Ok(payload) = payload,
-        //     Err(_) => return Err(PostemError::CannotGetPayload),
-        // }
-        Ok(())
+        Ok(open_packages)
     }
 }
 
@@ -299,20 +321,10 @@ impl Addressee {
     pub fn address(&self) -> PostemName {
         self.address.clone()
     }
-
-
-    pub fn open_packages(&self, packages: &mut Vec<Package>) -> Result<(), PostemError> {
-        // for package in packages {
-
-        // }
-        Ok(())
-    }
 }
 
 #[cfg(test)]
 mod tests {
-
-    use autonomi::Client;
 
     use super::*;
     use crate::client::ConnectionType;

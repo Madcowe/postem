@@ -53,8 +53,21 @@ impl Package {
     pub fn seal(&self) -> Chunk {
         self.seal.clone()
     }
+
     pub fn payload(&self) -> Option<Bytes> {
         self.payload.clone()
+    }
+
+    pub fn set_payload(&mut self, payload: Bytes) {
+        self.payload = Some(payload);
+    }
+
+    /// clones the pacakge and adds a payload
+    /// for use when opening packages which won't initally have a payload
+    pub fn clone_with_new_payload(&self, payload: Bytes) -> Package {
+        let mut package = self.clone();
+        package.set_payload(payload);
+        package
     }
 }
 impl PostemClient {
@@ -69,9 +82,11 @@ impl PostemClient {
             .client
             .data_put(payload.clone(), payment_option.clone())
             .await?;
-        let seal = Chunk::new(Bytes::from(
-            public_key.encrypt(data_map.to_hex()).to_bytes(),
-        ));
+        let seal = Chunk::new(
+            // Bytes::from(
+            // public_key.encrypt(data_map.to_hex()).to_bytes(),
+            Bytes::from(public_key.encrypt(data_map.0.value).to_bytes()),
+        );
         let (seal_cost, addr) = self.client.chunk_put(&seal, payment_option.clone()).await?;
         let address = GraphEntry::new(
             &location,
@@ -97,6 +112,26 @@ impl PostemClient {
             },
             cost,
         ))
+    }
+
+    pub async fn pacakge_cost(
+        &self,
+        payload: Bytes,
+        location_pk: &PublicKey,
+    ) -> Result<AttoTokens, PostemError> {
+        let mut cost = self.client.data_cost(payload).await?;
+        // hmm this will probably return 0 is someone actually stores a chunk full of zeros
+        cost.checked_add(
+            self.client
+                .chunk_cost(
+                    Chunk::new(Bytes::copy_from_slice(&[0u8; Chunk::MAX_RAW_SIZE])).address(),
+                )
+                .await?,
+        )
+        .unwrap_or(AttoTokens::zero());
+        cost.checked_add(self.client.graph_entry_cost(location_pk).await?)
+            .unwrap_or(AttoTokens::zero());
+        Ok(cost)
     }
 
     pub async fn package_post(
