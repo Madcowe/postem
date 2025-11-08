@@ -23,8 +23,8 @@ use autonomi::pointer::PointerTarget;
 use autonomi::{
     AttoTokens, Bytes, Chunk, GraphEntry, GraphEntryAddress, PointerAddress, PublicKey, SecretKey,
 };
-use blsttc::Ciphertext;
 use blsttc::rand;
+use blsttc::{Ciphertext, SecretKeySet};
 
 use crate::{Package, client::PostemClient, error::PostemError};
 
@@ -248,6 +248,35 @@ impl PostemClient {
             .checked_add(pointer_cost.await?)
             .unwrap_or(AttoTokens::zero());
         Ok(cost)
+    }
+
+    pub async fn addressee_set_last_recieved(
+        &mut self,
+        addressee: &mut Addressee,
+        location_graph_address: GraphEntryAddress,
+    ) -> Result<(), PostemError> {
+        let target = PointerTarget::GraphEntryAddress(location_graph_address);
+        self.client
+            .pointer_update(&addressee.secret_key, target)
+            .await?;
+        Ok(())
+    }
+
+    /// Get packages and sets last recieved
+    pub async fn addressee_inspect_packages(
+        &mut self,
+        addressee: &mut Addressee,
+        packages: &Vec<Package>,
+    ) -> Result<Vec<Package>, PostemError> {
+        let open_pacakges = self.open_packages(packages, addressee.secret_key()).await?;
+        if let Some(package) = open_pacakges.last() {
+            self.addressee_set_last_recieved(
+                addressee,
+                GraphEntryAddress::new(package.address().owner),
+            )
+            .await?;
+        }
+        Ok(open_pacakges)
     }
 
     pub async fn addressee_get_packages(
