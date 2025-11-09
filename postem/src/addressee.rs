@@ -23,8 +23,8 @@ use autonomi::pointer::PointerTarget;
 use autonomi::{
     AttoTokens, Bytes, Chunk, GraphEntry, GraphEntryAddress, PointerAddress, PublicKey, SecretKey,
 };
+use blsttc::Ciphertext;
 use blsttc::rand;
-use blsttc::{Ciphertext, SecretKeySet};
 
 use crate::{Package, client::PostemClient, error::PostemError};
 
@@ -171,6 +171,23 @@ impl PostemClient {
             },
         )
     }
+
+    pub async fn base_get_from_public_key(
+        &self,
+        public_key: PublicKey,
+    ) -> Result<PostemBase, PostemError> {
+        PostemBase::from_graph_entry(
+            match self
+                .client
+                .graph_entry_get(&GraphEntryAddress::new(public_key))
+                .await
+            {
+                Ok(graph_entry) => graph_entry,
+                Err(GraphError::Fork(forks)) => PostemBase::resolve_fork(forks),
+                Err(e) => return Err(e.into()),
+            },
+        )
+    }
 }
 
 /// The addressee which can receive packages. Consisting of the address where the base is located,
@@ -179,7 +196,7 @@ impl PostemClient {
 /// address has followed the chain of location from the base up to this point...there may well be
 /// pacakges that have been sent since they last checked beyond this location and the package
 /// at the location may not be valid.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Addressee {
     address: PostemName,
     secret_key: SecretKey,
@@ -250,6 +267,26 @@ impl PostemClient {
         Ok(cost)
     }
 
+    pub async fn addressee_get(
+        &self,
+        secret_key: SecretKey,
+        address: PostemName,
+    ) -> Result<Addressee, PostemError> {
+        let base = self
+            .base_get_from_public_key(secret_key.public_key())
+            .await?;
+        let last_received = match base.0.parents.first() {
+            Some(public_key) => PointerAddress::new(*public_key),
+            None => return Err(PostemError::NotValidPostemBase()),
+        };
+        Ok(Addressee {
+            address,
+            secret_key,
+            base,
+            last_received,
+        })
+    }
+
     pub async fn addressee_set_last_recieved(
         &mut self,
         addressee: &mut Addressee,
@@ -268,7 +305,7 @@ impl PostemClient {
         addressee: &mut Addressee,
         packages: &Vec<Package>,
     ) -> Result<Vec<Package>, PostemError> {
-        let open_pacakges = self.open_packages(packages, addressee.secret_key()).await?;
+        let open_pacakges = self.packages_open(packages, addressee.secret_key()).await?;
         if let Some(package) = open_pacakges.last() {
             self.addressee_set_last_recieved(
                 addressee,
@@ -287,7 +324,7 @@ impl PostemClient {
         let route = self
             .route_get(addressee.address(), derive_from_base)
             .await?;
-        let packages = self.route_get_pacakges(route).await?;
+        let packages = self.route_get_packages(route).await?;
         if let Some((_, last_location)) = packages.last() {
             let target = PointerTarget::GraphEntryAddress(GraphEntryAddress::new(
                 last_location.public_key(),
@@ -299,7 +336,7 @@ impl PostemClient {
         Ok(packages.iter().map(|p| p.0.clone()).collect())
     }
 
-    pub async fn open_package(
+    pub async fn package_open(
         &self,
         package: &Package,
         secret_key: SecretKey,
@@ -317,14 +354,14 @@ impl PostemClient {
         Ok(package.clone_with_new_payload(payload))
     }
 
-    pub async fn open_packages(
+    pub async fn packages_open(
         &self,
         packages: &Vec<Package>,
         secret_key: SecretKey,
     ) -> Result<Vec<Package>, PostemError> {
         let mut open_packages = vec![];
         for package in packages {
-            match self.open_package(package, secret_key.clone()).await {
+            match self.package_open(package, secret_key.clone()).await {
                 Err(PostemError::CannotDecrypt | PostemError::CannotGetPayload) => (),
                 Ok(open_package) => open_packages.push(open_package),
                 Err(e) => return Err(e),

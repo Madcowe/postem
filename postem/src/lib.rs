@@ -22,5 +22,8 @@ pub mod error;
 pub mod package;
 pub mod route;
 
-use crate::addressee::Addressee;
-use crate::package::Package;
+pub use crate::addressee::Addressee;
+pub use crate::client::{ConnectionType, PostemClient};
+pub use crate::error::PostemError;
+pub use crate::package::Package;
+pub use crate::route::Route;

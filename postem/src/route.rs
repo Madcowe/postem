@@ -130,11 +130,11 @@ impl PostemClient {
     }
 
     /// Returns all packages along the route, whether this is everythig or just since last received
-    /// depends on the value of derive_from_base when rohte_get was called
+    /// depends on the value of derive_from_base when route_get was called
     /// note the route's current location is modifed as the route is traversed
     /// you probably don;t want to call this on a route that has already called another function
     /// that also does this (eg location_get_available) as you will miss most pacakges
-    pub async fn route_get_pacakges(
+    pub async fn route_get_packages(
         &self,
         mut route: Route,
     ) -> Result<Vec<(Package, SecretKey)>, PostemError> {
@@ -245,24 +245,6 @@ mod tests {
             route.current_location.to_hex(),
             addressee.address().derive_key().unwrap().to_hex()
         );
-        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        // test currentl_location after adding a package
-        // let next_location = client.location_get_available(route).await.unwrap();
-        let (package, _) = client
-            .package_post(addressee.address(), Bytes::from("Hello"), payment_option)
-            .await
-            .unwrap();
-        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        let route = client.route_get(addressee.address(), false).await.unwrap();
-        // need to make recieveing method that updates last_received before further tests
-        // next 2 assert should work once updating last_received is implemented
-        // assert_eq!(route.current_location.to_bytes(), package.address().content);
-        // assert_eq!(
-        //     route.current_location.public_key().to_hex(),
-        //     package.address().owner.to_hex() // addressee.address().derive_key().unwrap().to_bytes()
-        // );
-        // after adding a pointer (ie not valid pacakge)
-        // after adding another package.
     }
 
     // #[tokio::test]
