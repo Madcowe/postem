@@ -272,9 +272,7 @@ impl PostemClient {
         secret_key: SecretKey,
         address: PostemName,
     ) -> Result<Addressee, PostemError> {
-        let base = self
-            .base_get_from_public_key(secret_key.public_key())
-            .await?;
+        let base = self.base_get(address.clone()).await?;
         let last_received = match base.0.parents.first() {
             Some(public_key) => PointerAddress::new(*public_key),
             None => return Err(PostemError::NotValidPostemBase()),
@@ -287,7 +285,7 @@ impl PostemClient {
         })
     }
 
-    pub async fn addressee_set_last_recieved(
+    pub async fn addressee_set_last_received(
         &mut self,
         addressee: &mut Addressee,
         location_graph_address: GraphEntryAddress,
@@ -307,7 +305,7 @@ impl PostemClient {
     ) -> Result<Vec<Package>, PostemError> {
         let open_pacakges = self.packages_open(packages, addressee.secret_key()).await?;
         if let Some(package) = open_pacakges.last() {
-            self.addressee_set_last_recieved(
+            self.addressee_set_last_received(
                 addressee,
                 GraphEntryAddress::new(package.address().owner),
             )
@@ -321,10 +319,24 @@ impl PostemClient {
         addressee: &mut Addressee,
         derive_from_base: bool,
     ) -> Result<Vec<Package>, PostemError> {
-        let route = self
+        let mut route = self
             .route_get(addressee.address(), derive_from_base)
             .await?;
-        let packages = self.route_get_packages(route).await?;
+        eprintln!(
+            "sk: {:?}\npk: {:?}",
+            route.current_location().to_hex(),
+            route.current_location().public_key().to_hex()
+        );
+        let packages = self.route_get_packages(route.clone()).await?;
+        eprintln!(
+            "pk of location pacakge should be stored at {}",
+            self.location_get_available(route)
+                .await
+                .unwrap()
+                .public_key()
+                .to_hex()
+        );
+        eprintln!("Packages received: {}", packages.len());
         if let Some((_, last_location)) = packages.last() {
             let target = PointerTarget::GraphEntryAddress(GraphEntryAddress::new(
                 last_location.public_key(),
@@ -394,6 +406,7 @@ mod tests {
 
     use super::*;
     use crate::client::ConnectionType;
+    use autonomi::{Bytes, ChunkAddress, XorName};
 
     #[test]
     fn postem_name() {
@@ -431,7 +444,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
     // Assumes run from freshly started local client
     async fn check_if_public_key_used() -> Result<(), PostemError> {
         let client = PostemClient::init(ConnectionType::Local).await?;
@@ -442,7 +454,7 @@ mod tests {
         // This will fail if local clinet data has not been reset
         assert_eq!(bool, false);
         let target = PointerTarget::PointerAddress(PointerAddress::new(public_key));
-        let payment_option = client.get_payment_option("").await?;
+        let payment_option = client.get_payment_option("")?;
         client
             .client
             .pointer_create(&secret_key, target, payment_option)
@@ -454,18 +466,22 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
     // Assumes run from freshly started local client
     async fn create_addressee() -> Result<(), PostemError> {
         let client = PostemClient::init(ConnectionType::Local).await?;
-        let payment_option = client.get_payment_option("").await?;
+        let payment_option = client.get_payment_option("")?;
         let name = "my.address";
-        let estimate = client.addressee_cost(&name).await?;
-        eprintln!("Estimate: {:?}", estimate);
+        // let estimate = client.addressee_cost(&name).await?;
+        // eprintln!("Estimate: {:?}", estimate);
         let addressee = client
             .addressee_create(name, payment_option.clone(), None)
             .await?;
-        assert_eq!(addressee.address, PostemName::create(&name)?);
+        let derived_name = PostemName::create(name).unwrap();
+        assert_eq!(addressee.address, derived_name);
+        assert_eq!(
+            addressee.base.0.owner.to_hex(),
+            derived_name.derive_key().unwrap().public_key().to_hex()
+        );
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let addressee_result = client
             .addressee_create(name, payment_option.clone(), None)
@@ -481,19 +497,160 @@ mod tests {
             .client
             .pointer_create(&secret_key, target, payment_option.clone())
             .await?;
-        let address = PostemName::create("my.address")?;
-        let base_sk = address.derive_key()?;
-        let base = client
-            .base_create(base_sk, &secret_key.public_key(), payment_option.clone())
-            .await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let addressee = client
+            .addressee_create(
+                "my.address2",
+                payment_option.clone(),
+                Some(secret_key.clone()),
+            )
+            .await
+            .unwrap();
         assert_eq!(
-            base,
-            Err(PostemError::NameAlreadyExists(
-                addressee.base.0.address().to_hex(),
-                None
-            ))
+            addressee.address,
+            PostemName::create("my.address2").unwrap()
         );
+        assert_eq!(addressee.secret_key.to_hex(), secret_key.to_hex());
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn addressee_set_last_received() {
+        let mut client = PostemClient::init(ConnectionType::Local).await.unwrap();
+        let payment_option = client.get_payment_option("").unwrap();
+        let name = "my.address3";
+        let mut addressee = client
+            .addressee_create(name, payment_option.clone(), None)
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let last_recieved_pointing_to_sk = match client
+            .client
+            .pointer_get(&addressee.last_received)
+            .await
+            .unwrap()
+            .target()
+        {
+            PointerTarget::GraphEntryAddress(graph_address) => graph_address.owner().to_hex(),
+            _ => panic!("Target should be pointing to graph"),
+        };
+        assert_eq!(
+            last_recieved_pointing_to_sk,
+            addressee.base().graph_entry().owner.to_hex()
+        );
+        let graph_address = GraphEntryAddress::new(SecretKey::random().public_key());
+        client
+            .addressee_set_last_received(&mut addressee, graph_address)
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let last_recieved_pointing_to_sk = match client
+            .client
+            .pointer_get(&addressee.last_received)
+            .await
+            .unwrap()
+            .target()
+        {
+            PointerTarget::GraphEntryAddress(graph_address) => graph_address.owner().to_hex(),
+            _ => panic!("Target should be pointing to graph"),
+        };
+        assert_eq!(last_recieved_pointing_to_sk, graph_address.to_hex());
+    }
+
+    #[tokio::test]
+    async fn addressee_get_packages() {
+        let mut client = PostemClient::init(ConnectionType::Local).await.unwrap();
+        let payment_option = client.get_payment_option("").unwrap();
+        let name = SecretKey::random().to_hex();
+        let mut addressee = client
+            .addressee_create(&name, payment_option.clone(), None)
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let packages = client
+            .addressee_get_packages(&mut addressee, true)
+            .await
+            .unwrap();
+        assert!(packages.is_empty());
+        let message = Bytes::from("Hello");
+        let (package, _attos) = client
+            .package_post(addressee.address(), message.clone(), payment_option.clone())
+            .await
+            .unwrap();
+        eprintln!("package pk: {}", package.address().owner.to_hex());
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let got_graph = client
+            .client
+            .graph_entry_get(&package.address().address())
+            .await
+            .unwrap();
+        eprintln!("{:?}", got_graph);
+        // let got_chunk = client
+        //     .client
+        //     .chunk_get(&ChunkAddress::new(XorName::from_content(
+        //         Bytes::copy_from_slice(got_graph.descendants.first().unwrap().1),
+        //     )))
+        //     .await
+        //     .unwrap();
+        // eprintln!("{:?}", got_chunk.value());
+        let packages = client
+            .addressee_get_packages(&mut addressee, true)
+            .await
+            .unwrap();
+        assert_eq!(packages.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn addressee_inspect_packages() {
+        let mut client = PostemClient::init(ConnectionType::Local).await.unwrap();
+        let payment_option = client.get_payment_option("").unwrap();
+        let name = "my.address4";
+        let mut addressee = client
+            .addressee_create(name, payment_option.clone(), None)
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let last_recieved_pointing_to_sk = match client
+            .client
+            .pointer_get(&addressee.last_received)
+            .await
+            .unwrap()
+            .target()
+        {
+            PointerTarget::GraphEntryAddress(graph_address) => graph_address.owner().to_hex(),
+            _ => panic!("Target should be pointing to graph"),
+        };
+        assert_eq!(
+            last_recieved_pointing_to_sk,
+            addressee.base().graph_entry().owner.to_hex()
+        );
+        let packages = client
+            .addressee_get_packages(&mut addressee, true)
+            .await
+            .unwrap();
+        assert!(packages.is_empty());
+        let items = client
+            .addressee_inspect_packages(&mut addressee, &packages)
+            .await
+            .unwrap();
+        assert!(items.is_empty());
+        let message = Bytes::from("Hello");
+        let (_package, _attos) = client
+            .package_post(addressee.address(), message.clone(), payment_option.clone())
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let packages = client
+            .addressee_get_packages(&mut addressee, true)
+            .await
+            .unwrap();
+        assert!(!packages.is_empty());
+        let items = client
+            .addressee_inspect_packages(&mut addressee, &packages)
+            .await
+            .unwrap();
+        assert!(!items.is_empty());
+        assert_eq!(message, items.first().unwrap().payload().unwrap());
     }
 
     // it seems the particular address can have signifcant varation in quote

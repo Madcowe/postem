@@ -24,6 +24,7 @@ pub mod route;
 
 pub use crate::addressee::Addressee;
 pub use crate::client::{ConnectionType, PostemClient};
+pub use crate::door_mat::Doormat;
 pub use crate::error::PostemError;
 pub use crate::package::Package;
 pub use crate::route::Route;

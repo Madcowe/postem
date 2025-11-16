@@ -50,16 +50,11 @@ impl PostemClient {
         })
     }
 
-    pub async fn get_payment_option(
-        &self,
-        private_key: &str,
-    ) -> Result<PaymentOption, PostemError> {
-        Ok(PaymentOption::from(
-            self.get_funded_wallet(&private_key).await?,
-        ))
+    pub fn get_payment_option(&self, private_key: &str) -> Result<PaymentOption, PostemError> {
+        Ok(PaymentOption::from(self.get_funded_wallet(&private_key)?))
     }
 
-    pub async fn get_funded_wallet(&self, private_key: &str) -> Result<Wallet, PostemError> {
+    pub fn get_funded_wallet(&self, private_key: &str) -> Result<Wallet, PostemError> {
         let private_key = match self.connection_type {
             ConnectionType::Antnet => private_key,
             ConnectionType::Local => {

@@ -54,7 +54,7 @@ impl PostemClient {
     }
 
     /// check if any new pacakges and downloads returns true if this is the case
-    pub async fn update(&mut self, doormat: &mut Doormat) -> Result<bool, PostemError> {
+    pub async fn doormat_update(&mut self, doormat: &mut Doormat) -> Result<bool, PostemError> {
         let mut new_items = false;
         let mut new_packages = self
             .addressee_get_packages(&mut doormat.addressee(), false)

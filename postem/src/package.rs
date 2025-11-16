@@ -114,7 +114,7 @@ impl PostemClient {
         ))
     }
 
-    pub async fn pacakge_cost(
+    pub async fn package_cost(
         &self,
         payload: Bytes,
         location_pk: &PublicKey,
@@ -136,11 +136,11 @@ impl PostemClient {
 
     pub async fn package_post(
         &self,
-        addressee: PostemName,
+        postem_name: PostemName,
         content: Bytes,
         payment_option: PaymentOption,
     ) -> Result<(Package, AttoTokens), PostemError> {
-        let route = self.route_get(addressee, false).await?;
+        let route = self.route_get(postem_name, false).await?;
         let base = route.base();
         let location = self.location_get_available(route).await?;
         self.package_create(&location, &base.public_key(), content, payment_option)
@@ -156,7 +156,7 @@ impl PostemClient {
         if let Some((public_key, seal_xor)) = address.descendants.first() {
             let seal = self
                 .client
-                .chunk_get(&ChunkAddress::new(XorName::from_content(seal_xor)))
+                .chunk_get(&ChunkAddress::new(XorName(*seal_xor)))
                 .await?;
             return Ok((
                 Package {
@@ -176,13 +176,13 @@ impl PostemClient {
 mod tests {
     use super::*;
     use crate::client::ConnectionType;
+    use crate::{addressee::PostemName, package};
     use autonomi::{Bytes, GraphEntryAddress};
 
     #[tokio::test]
-    #[ignore]
     async fn package_create() -> Result<(), PostemError> {
         let client = PostemClient::init(ConnectionType::Local).await?;
-        let payment_option = client.get_payment_option("").await?;
+        let payment_option = client.get_payment_option("")?;
         let public_key = SecretKey::random().public_key();
         let location = SecretKey::random();
         let payload = Bytes::from("Dear world");
@@ -212,5 +212,26 @@ mod tests {
             ))
         );
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn package_post_and_get() {
+        let client = PostemClient::init(ConnectionType::Local).await.unwrap();
+        let payment_option = client.get_payment_option("").unwrap();
+        let name = SecretKey::random().to_hex();
+        let postem_name = PostemName::create(&name).unwrap();
+        client
+            .addressee_create(&name, payment_option.clone(), None)
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let message = Bytes::from("Hello");
+        let (package, _attos) = client
+            .package_post(postem_name, message, payment_option)
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let got_package = client.package_get(package.clone().address).await.unwrap();
+        assert_eq!(got_package.0.seal(), package.seal());
     }
 }

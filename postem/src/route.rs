@@ -15,14 +15,12 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::ascii::AsciiExt;
-
 use autonomi::graph::GraphError;
 use autonomi::pointer::PointerTarget;
 use autonomi::{GraphEntry, GraphEntryAddress, PointerAddress, SecretKey};
 
 use crate::addressee::PostemName;
-use crate::package::{self, Package};
+use crate::package::Package;
 use crate::{addressee::PostemBase, client::PostemClient, error::PostemError};
 
 #[derive(Clone, Debug)]
@@ -47,6 +45,10 @@ impl Route {
 
     pub fn base(&self) -> PostemBase {
         self.base.clone()
+    }
+
+    pub fn current_location(&self) -> SecretKey {
+        self.current_location.clone()
     }
 }
 
@@ -166,11 +168,10 @@ mod tests {
     use crate::client::ConnectionType;
 
     #[tokio::test]
-    #[ignore]
     // Assumes run from freshly started local client
     async fn location_get_available() -> Result<(), PostemError> {
         let client = PostemClient::init(ConnectionType::Local).await?;
-        let payment_option = client.get_payment_option("").await?;
+        let payment_option = client.get_payment_option("")?;
         let addressee = client
             .addressee_create("test.address", payment_option.clone(), None)
             .await?;
@@ -232,10 +233,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_route() {
+    async fn route_get() {
         // Assumes run from freshly started local client
         let client = PostemClient::init(ConnectionType::Local).await.unwrap();
-        let payment_option = client.get_payment_option("").await.unwrap();
+        let payment_option = client.get_payment_option("").unwrap();
         let addressee = client
             .addressee_create("another.test.address", payment_option.clone(), None)
             .await
@@ -245,6 +246,34 @@ mod tests {
             route.current_location.to_hex(),
             addressee.address().derive_key().unwrap().to_hex()
         );
+    }
+
+    #[tokio::test]
+    async fn route_get_packages() {
+        // Assumes run from freshly started local client
+        let client = PostemClient::init(ConnectionType::Local).await.unwrap();
+        let payment_option = client.get_payment_option("").unwrap();
+        let addressee = client
+            .addressee_create("yet.another.test.address", payment_option.clone(), None)
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let route = client.route_get(addressee.address(), true).await.unwrap();
+        let packages = client.route_get_packages(route).await.unwrap();
+        assert!(packages.is_empty());
+        let message = Bytes::from("Hello");
+        let (_package, _attos) = client
+            .package_post(addressee.address(), message.clone(), payment_option.clone())
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let route = client.route_get(addressee.address(), true).await.unwrap();
+        let packages = client.route_get_packages(route).await.unwrap();
+        assert_eq!(packages.len(), 1);
+        // test not derving from base with 1 pacakges already received so shouldn't return anything
+        let route = client.route_get(addressee.address(), false).await.unwrap();
+        let packages = client.route_get_packages(route).await.unwrap();
+        assert_eq!(packages.len(), 0);
     }
 
     // #[tokio::test]
