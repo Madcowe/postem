@@ -14,18 +14,18 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-use crate::{Addressee, Package, PostemClient, PostemError, addressee::PostemName};
+use crate::{Addressee, Package, PostemClient, PostemError, addressee::PostemName, door_mat};
 use autonomi::SecretKey;
 
 /// A collection of all valid open pacakges for an addressee
-pub struct Doormat {
+pub struct DoorMat {
     addressee: Addressee,
     items: Vec<Package>,
 }
-impl Doormat {
+impl DoorMat {
     /// Recreate doormat from localy saved resources rather than download in entirety
-    pub fn recreate(addressee: Addressee, items: Vec<Package>) -> Doormat {
-        Doormat { addressee, items }
+    pub fn recreate(addressee: Addressee, items: Vec<Package>) -> DoorMat {
+        DoorMat { addressee, items }
     }
 
     pub fn addressee(&self) -> Addressee {
@@ -42,7 +42,7 @@ impl PostemClient {
         &mut self,
         secret_key: SecretKey,
         name: &str,
-    ) -> Result<Doormat, PostemError> {
+    ) -> Result<DoorMat, PostemError> {
         let name = PostemName::create(name)?;
         let mut addressee = self.addressee_get(secret_key, name).await?;
         // let mut route = self.route_get(name, true).await?;
@@ -50,19 +50,22 @@ impl PostemClient {
         let items = self
             .addressee_inspect_packages(&mut addressee, &packages)
             .await?;
-        Ok(Doormat { addressee, items })
+        Ok(DoorMat { addressee, items })
     }
 
     /// check if any new pacakges and downloads returns true if this is the case
-    pub async fn doormat_update(&mut self, doormat: &mut Doormat) -> Result<bool, PostemError> {
-        let mut new_items = false;
-        let mut new_packages = self
-            .addressee_get_packages(&mut doormat.addressee(), false)
+    pub async fn doormat_update(&mut self, door_mat: &mut DoorMat) -> Result<bool, PostemError> {
+        let mut you_have_got_mail = false;
+        let new_packages = self
+            .addressee_get_packages(&mut door_mat.addressee(), false)
             .await?;
-        if !new_packages.is_empty() {
-            doormat.items.append(&mut new_packages);
-            new_items = true;
+        let mut new_items = self
+            .addressee_inspect_packages(&mut door_mat.addressee(), &new_packages)
+            .await?;
+        if !new_items.is_empty() {
+            door_mat.items.append(&mut new_items);
+            you_have_got_mail = true;
         }
-        Ok(new_items)
+        Ok(you_have_got_mail)
     }
 }

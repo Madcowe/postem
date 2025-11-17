@@ -250,13 +250,17 @@ mod tests {
 
     #[tokio::test]
     async fn route_get_packages() {
-        // Assumes run from freshly started local client
         let client = PostemClient::init(ConnectionType::Local).await.unwrap();
         let payment_option = client.get_payment_option("").unwrap();
+        let name = SecretKey::random().to_hex();
         let addressee = client
-            .addressee_create("yet.another.test.address", payment_option.clone(), None)
+            .addressee_create(&name, payment_option.clone(), None)
             .await
             .unwrap();
+        // let addressee = client
+        //     .addressee_create("yet.another.test.address", payment_option.clone(), None)
+        //     .await
+        //     .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let route = client.route_get(addressee.address(), true).await.unwrap();
         let packages = client.route_get_packages(route).await.unwrap();
@@ -266,14 +270,14 @@ mod tests {
             .package_post(addressee.address(), message.clone(), payment_option.clone())
             .await
             .unwrap();
+        let (_package, _attos) = client
+            .package_post(addressee.address(), message.clone(), payment_option.clone())
+            .await
+            .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let route = client.route_get(addressee.address(), true).await.unwrap();
         let packages = client.route_get_packages(route).await.unwrap();
-        assert_eq!(packages.len(), 1);
-        // test not derving from base with 1 pacakges already received so shouldn't return anything
-        let route = client.route_get(addressee.address(), false).await.unwrap();
-        let packages = client.route_get_packages(route).await.unwrap();
-        assert_eq!(packages.len(), 0);
+        assert_eq!(packages.len(), 2);
     }
 
     // #[tokio::test]

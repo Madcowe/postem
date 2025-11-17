@@ -319,24 +319,10 @@ impl PostemClient {
         addressee: &mut Addressee,
         derive_from_base: bool,
     ) -> Result<Vec<Package>, PostemError> {
-        let mut route = self
+        let route = self
             .route_get(addressee.address(), derive_from_base)
             .await?;
-        eprintln!(
-            "sk: {:?}\npk: {:?}",
-            route.current_location().to_hex(),
-            route.current_location().public_key().to_hex()
-        );
-        let packages = self.route_get_packages(route.clone()).await?;
-        eprintln!(
-            "pk of location pacakge should be stored at {}",
-            self.location_get_available(route)
-                .await
-                .unwrap()
-                .public_key()
-                .to_hex()
-        );
-        eprintln!("Packages received: {}", packages.len());
+        let packages = self.route_get_packages(route).await?;
         if let Some((_, last_location)) = packages.last() {
             let target = PointerTarget::GraphEntryAddress(GraphEntryAddress::new(
                 last_location.public_key(),
@@ -406,7 +392,7 @@ mod tests {
 
     use super::*;
     use crate::client::ConnectionType;
-    use autonomi::{Bytes, ChunkAddress, XorName};
+    use autonomi::Bytes;
 
     #[test]
     fn postem_name() {
@@ -585,14 +571,6 @@ mod tests {
             .await
             .unwrap();
         eprintln!("{:?}", got_graph);
-        // let got_chunk = client
-        //     .client
-        //     .chunk_get(&ChunkAddress::new(XorName::from_content(
-        //         Bytes::copy_from_slice(got_graph.descendants.first().unwrap().1),
-        //     )))
-        //     .await
-        //     .unwrap();
-        // eprintln!("{:?}", got_chunk.value());
         let packages = client
             .addressee_get_packages(&mut addressee, true)
             .await
@@ -604,9 +582,9 @@ mod tests {
     async fn addressee_inspect_packages() {
         let mut client = PostemClient::init(ConnectionType::Local).await.unwrap();
         let payment_option = client.get_payment_option("").unwrap();
-        let name = "my.address4";
+        let name = SecretKey::random().to_hex();
         let mut addressee = client
-            .addressee_create(name, payment_option.clone(), None)
+            .addressee_create(&name, payment_option.clone(), None)
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
