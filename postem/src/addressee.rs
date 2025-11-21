@@ -22,6 +22,7 @@ use autonomi::graph::GraphError;
 use autonomi::pointer::PointerTarget;
 use autonomi::{
     AttoTokens, Bytes, Chunk, GraphEntry, GraphEntryAddress, PointerAddress, PublicKey, SecretKey,
+    XorName,
 };
 use blsttc::Ciphertext;
 use blsttc::rand;
@@ -188,6 +189,23 @@ impl PostemClient {
             },
         )
     }
+
+    // returns public key of last received location
+    pub async fn base_get_last_received_public_key(
+        &self,
+        base: &PostemBase,
+    ) -> Result<PublicKey, PostemError> {
+        if let PointerTarget::GraphEntryAddress(last_received_address) = self
+            .client
+            .pointer_get(&PointerAddress::new(base.public_key()))
+            .await?
+            .target()
+        {
+            return Ok(last_received_address.owner().clone());
+        } else {
+            return Err(PostemError::InvalidLastReceived);
+        }
+    }
 }
 
 /// The addressee which can receive packages. Consisting of the address where the base is located,
@@ -323,14 +341,15 @@ impl PostemClient {
             .route_get(addressee.address(), derive_from_base)
             .await?;
         let packages = self.route_get_packages(route).await?;
-        if let Some((_, last_location)) = packages.last() {
-            let target = PointerTarget::GraphEntryAddress(GraphEntryAddress::new(
-                last_location.public_key(),
-            ));
-            self.client
-                .pointer_update(&addressee.secret_key, target)
-                .await?;
-        }
+        // should this happen here as it hasn't checked they are valid at this point??
+        // if let Some((_, last_location)) = packages.last() {
+        //     let target = PointerTarget::GraphEntryAddress(GraphEntryAddress::new(
+        //         last_location.public_key(),
+        //     ));
+        //     self.client
+        //         .pointer_update(&addressee.secret_key, target)
+        //         .await?;
+        // }
         Ok(packages.iter().map(|p| p.0.clone()).collect())
     }
 

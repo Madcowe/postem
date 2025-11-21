@@ -57,6 +57,8 @@ pub enum PostemError {
     CannotDecrypt,
     #[error("Cannot not get payload from decrypted seal")]
     CannotGetPayload,
+    #[error("Last received location is not valid")]
+    InvalidLastReceived,
 }
 impl From<GraphError> for PostemError {
     fn from(e: GraphError) -> Self {
