@@ -29,9 +29,9 @@ async fn test_sending_and_receiving() {
         .unwrap();
     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
     let you_have_got_mail = client.doormat_update(&mut door_mat).await.unwrap();
+    // eprintln!("{:?}", door_mat.items().first().unwrap());
     assert_eq!(you_have_got_mail, true);
     assert_eq!(door_mat.items().len(), 1);
-    eprintln!("{:?}", door_mat.items().first().unwrap());
     assert_eq!(
         door_mat
             .items()
@@ -41,12 +41,10 @@ async fn test_sending_and_receiving() {
             .expect("message should have a payload"),
         message
     );
-    // test update without any new pacakges
-    // currently this will always return the package from the last_recieved location
-    // even if it has been returned previously hmmmm......
+    // test update without any new pacakges should return same number
     let you_have_got_mail = client.doormat_update(&mut door_mat).await.unwrap();
     assert_eq!(you_have_got_mail, false);
-    assert_eq!(door_mat.items().len(), 0);
+    assert_eq!(door_mat.items().len(), 1);
     eprintln!("{:?}", door_mat.items().first().unwrap());
 
     // after adding a pointer (ie not valid pacakge)

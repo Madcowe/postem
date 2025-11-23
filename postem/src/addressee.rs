@@ -341,15 +341,6 @@ impl PostemClient {
             .route_get(addressee.address(), derive_from_base)
             .await?;
         let packages = self.route_get_packages(route).await?;
-        // should this happen here as it hasn't checked they are valid at this point??
-        // if let Some((_, last_location)) = packages.last() {
-        //     let target = PointerTarget::GraphEntryAddress(GraphEntryAddress::new(
-        //         last_location.public_key(),
-        //     ));
-        //     self.client
-        //         .pointer_update(&addressee.secret_key, target)
-        //         .await?;
-        // }
         Ok(packages.iter().map(|p| p.0.clone()).collect())
     }
 
@@ -572,6 +563,7 @@ mod tests {
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        // try retreiving pacakges when none have been sen
         let packages = client
             .addressee_get_packages(&mut addressee, true)
             .await
@@ -582,19 +574,18 @@ mod tests {
             .package_post(addressee.address(), message.clone(), payment_option.clone())
             .await
             .unwrap();
-        eprintln!("package pk: {}", package.address().owner.to_hex());
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let got_graph = client
             .client
             .graph_entry_get(&package.address().address())
             .await
             .unwrap();
-        eprintln!("{:?}", got_graph);
         let packages = client
             .addressee_get_packages(&mut addressee, true)
             .await
             .unwrap();
         assert_eq!(packages.len(), 1);
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
     }
 
     #[tokio::test]
@@ -648,6 +639,12 @@ mod tests {
             .unwrap();
         assert!(!items.is_empty());
         assert_eq!(message, items.first().unwrap().payload().unwrap());
+        // check if not derived from base it doesn't return anything are now new pacakges
+        let packages = client
+            .addressee_get_packages(&mut addressee, false)
+            .await
+            .unwrap();
+        assert!(packages.is_empty());
     }
 
     // it seems the particular address can have signifcant varation in quote

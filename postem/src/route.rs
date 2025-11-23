@@ -17,7 +17,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use autonomi::graph::GraphError;
 use autonomi::{GraphEntry, GraphEntryAddress, SecretKey};
-use blsttc::SK_SIZE;
 
 use crate::addressee::PostemName;
 use crate::package::Package;
@@ -26,15 +25,11 @@ use crate::{addressee::PostemBase, client::PostemClient, error::PostemError};
 #[derive(Clone, Debug)]
 pub struct Route {
     base: PostemBase,
-    last_received: [u8; SK_SIZE],
+    last_received: SecretKey,
     current_location: SecretKey,
 }
 impl Route {
-    pub fn new(
-        base: PostemBase,
-        last_received: [u8; SK_SIZE],
-        current_location: SecretKey,
-    ) -> Route {
+    pub fn new(base: PostemBase, last_received: SecretKey, current_location: SecretKey) -> Route {
         Route {
             base,
             last_received,
@@ -47,6 +42,7 @@ impl Route {
         self.current_location = self
             .current_location
             .derive_child(&self.base.derivation_index().into_bytes());
+        // .derive_child(&self.base.derivation_index());
     }
 
     pub fn base(&self) -> PostemBase {
@@ -69,17 +65,6 @@ impl PostemClient {
         // let public_key = base.public_key();
         let mut current_location = name.derive_key()?;
         if !derive_from_base {
-            // let last_received = self
-            //     .client
-            //     .pointer_get(&PointerAddress::new(public_key))
-            //     .await?;
-            // if not pointing at base goto last received and if that is valid use at start location
-            // let current_graph_entry =
-            // if last_received.target().xorname()
-            //     != PointerTarget::GraphEntryAddress(graph_entry_address).xorname()
-            //     && let PointerTarget::GraphEntryAddress(last_received_address) =
-            //         last_received.target()
-            // {
             let last_received_address =
                 GraphEntryAddress::new(self.base_get_last_received_public_key(&base).await?);
             if last_received_address != graph_entry_address {
@@ -97,7 +82,7 @@ impl PostemClient {
 
         Ok(Route::new(
             base.clone(),
-            current_location.to_bytes(),
+            current_location.clone(),
             current_location,
         ))
     }
@@ -156,7 +141,13 @@ impl PostemClient {
         let mut packages = Vec::new();
         // skip if at last received as don't need to return pacakge if already receieved
         // or if derived from base will just be base address
-        if route.current_location.to_bytes() == route.last_received {
+        eprintln!(
+            "Last received: {:?}\ncurrent_location: {:?}",
+            route.last_received.to_hex(),
+            route.current_location.to_hex(),
+        );
+        if route.current_location.to_hex() == route.last_received.to_hex() {
+            eprintln!("skipping: {:?}", route.current_location.to_hex());
             route.next();
         }
         while self.location_used(&route).await? {
@@ -202,7 +193,7 @@ mod tests {
             .await?;
         let index = DerivationIndex::from_bytes(graph_entry.content);
         let start_location = addressee.address().derive_key().unwrap();
-        let route = Route::new(addressee.base(), start_location.to_bytes(), start_location);
+        let route = Route::new(addressee.base(), start_location.clone(), start_location);
         let next_location = client.location_get_available(route.clone()).await?;
         assert_eq!(
             next_location.to_hex(),
