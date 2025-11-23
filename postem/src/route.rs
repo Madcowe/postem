@@ -76,7 +76,8 @@ impl PostemClient {
                     }
                 }
                 // what errors happen if you try to get a graph entry and something else is there or nothing is there?
-                // GraphError:AlreadyExists for the former GraphEntry::Serialiation for the later
+                // GraphError::Serialization for the former and GraphError:GetError for the later
+                // Trying to put to a location with something already there will give GraphError:AlreadyExists, even if not graph
             };
         }
 
@@ -106,6 +107,11 @@ impl PostemClient {
         {
             Ok(graph_entry) => Ok(vec![graph_entry]),
             Err(GraphError::Fork(forks)) => Ok(forks),
+            // Return empty vector if not graph entry...so should skip if another autonomi type
+            Err(GraphError::Serialization(_)) => Ok(Vec::new()),
+            // Should we deal with GraphError:GetError which would indicate it not existing
+            // in theory this shouldn't happen if the calling function are correct so probably
+            // just want error returned if this did happen
             Err(e) => return Err(e.into()),
         }
     }
@@ -141,13 +147,7 @@ impl PostemClient {
         let mut packages = Vec::new();
         // skip if at last received as don't need to return pacakge if already receieved
         // or if derived from base will just be base address
-        eprintln!(
-            "Last received: {:?}\ncurrent_location: {:?}",
-            route.last_received.to_hex(),
-            route.current_location.to_hex(),
-        );
         if route.current_location.to_hex() == route.last_received.to_hex() {
-            eprintln!("skipping: {:?}", route.current_location.to_hex());
             route.next();
         }
         while self.location_used(&route).await? {

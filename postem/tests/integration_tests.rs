@@ -41,32 +41,32 @@ async fn test_sending_and_receiving() {
             .expect("message should have a payload"),
         message
     );
-    // test update without any new pacakges should return same number
+    // test update without any new packages should return same number
     let you_have_got_mail = client.doormat_update(&mut door_mat).await.unwrap();
     assert_eq!(you_have_got_mail, false);
     assert_eq!(door_mat.items().len(), 1);
     eprintln!("{:?}", door_mat.items().first().unwrap());
 
     // after adding a pointer (ie not valid pacakge)
-    // let route = client
-    //     .route_get(PostemName::create(&name).unwrap(), false)
-    //     .await
-    //     .unwrap();
-    // let next_location = client.location_get_available(route.clone()).await.unwrap();
-    // let pointer = Pointer::new(
-    //     &next_location,
-    //     0,
-    //     PointerTarget::GraphEntryAddress(GraphEntryAddress::new(SecretKey::random().public_key())),
-    // );
-    // let autonomi_client = Client::init_local().await.unwrap();
-    // autonomi_client
-    //     .pointer_put(pointer, payment_option.clone())
-    //     .await
-    //     .unwrap();
-    // tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-    // let you_have_got_mail = client.doormat_update(&mut door_mat).await.unwrap();
-    // assert_eq!(you_have_got_mail, false);
-    // assert_eq!(door_mat.items().len(), 0);
+    let route = client
+        .route_get(PostemName::create(&name).unwrap(), false)
+        .await
+        .unwrap();
+    let next_location = client.location_get_available(route.clone()).await.unwrap();
+    let pointer = Pointer::new(
+        &next_location,
+        0,
+        PointerTarget::GraphEntryAddress(GraphEntryAddress::new(SecretKey::random().public_key())),
+    );
+    let autonomi_client = Client::init_local().await.unwrap();
+    autonomi_client
+        .pointer_put(pointer, payment_option.clone())
+        .await
+        .unwrap();
+    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    let you_have_got_mail = client.doormat_update(&mut door_mat).await.unwrap();
+    assert_eq!(you_have_got_mail, false);
+    assert_eq!(door_mat.items().len(), 1);
 
     // after adding another package.
     // do a fresh pull of entire door mat

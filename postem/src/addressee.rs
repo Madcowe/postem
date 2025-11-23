@@ -73,6 +73,9 @@ impl PostemClient {
         &self,
         public_key: &PublicKey,
     ) -> Result<bool, PostemError> {
+        // Note doesn't make any diffence which of the check existence methods is used (graph,
+        // pointer, scratchpad) they will all return true even if occupied by different type.
+        // Haven't tested what would happen if it collided with a chunk address.
         Ok(self
             .client
             .graph_entry_check_existence(&GraphEntryAddress::new(public_key.clone()))
@@ -350,7 +353,6 @@ impl PostemClient {
         secret_key: SecretKey,
     ) -> Result<Package, PostemError> {
         // Maybe in the event of the error from Cipertext::from_bytes should also return CannotDecrypt
-        // !!! Needs testing as not sure this is correctly converting back to orginal data map
         let data_map = match secret_key.decrypt(&Ciphertext::from_bytes(package.seal().value())?) {
             Some(decrypted_data) => DataMapChunk::from(Chunk::new(Bytes::from(decrypted_data))),
             None => return Err(PostemError::CannotDecrypt),
