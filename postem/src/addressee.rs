@@ -66,6 +66,10 @@ impl PostemName {
         }
         Ok(key)
     }
+
+    pub fn name(&self) -> String {
+        self.0.join(".")
+    }
 }
 
 impl PostemClient {
@@ -171,6 +175,9 @@ impl PostemClient {
             {
                 Ok(graph_entry) => graph_entry,
                 Err(GraphError::Fork(forks)) => PostemBase::resolve_fork(forks),
+                Err(GraphError::GetError(_)) => {
+                    return Err(PostemError::InvalidAddress(name.name()));
+                }
                 Err(e) => return Err(e.into()),
             },
         )

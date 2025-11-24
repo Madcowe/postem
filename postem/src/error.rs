@@ -59,6 +59,8 @@ pub enum PostemError {
     CannotGetPayload,
     #[error("Last received location is not valid")]
     InvalidLastReceived,
+    #[error("Postem address does not exist: {0}")]
+    InvalidAddress(String),
 }
 impl From<GraphError> for PostemError {
     fn from(e: GraphError) -> Self {
