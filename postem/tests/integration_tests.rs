@@ -2,13 +2,15 @@ use autonomi::pointer::PointerTarget;
 use autonomi::{Bytes, Client, GraphEntryAddress, Pointer, SecretKey};
 use postem::addressee::PostemName;
 use postem::{ConnectionType, PostemClient, PostemError};
+use std::time::SystemTime;
+use tokio::task::JoinSet;
 
 #[tokio::test]
 async fn test_sending_and_receiving() {
     let mut client = PostemClient::init(ConnectionType::Local).await.unwrap();
     let payment_option = client.get_payment_option("").unwrap();
     let name = SecretKey::random().to_hex();
-    let addressee = client
+    let (addressee, _) = client
         .addressee_create(&name, payment_option.clone(), None)
         .await
         .unwrap();
@@ -45,7 +47,7 @@ async fn test_sending_and_receiving() {
     let you_have_got_mail = client.doormat_update(&mut door_mat).await.unwrap();
     assert_eq!(you_have_got_mail, false);
     assert_eq!(door_mat.items().len(), 1);
-    eprintln!("{:?}", door_mat.items().first().unwrap());
+    // eprintln!("{:?}", door_mat.items().first().unwrap());
 
     // after adding a pointer (ie not valid pacakage)
     let route = client
@@ -138,3 +140,42 @@ async fn test_post_to_non_existing_address() {
 }
 
 // stress test adding thousands of pack:ges and thousands of non-pacakges
+#[tokio::test]
+#[ignore]
+async fn fan_mail() {
+    let mut client = PostemClient::init(ConnectionType::Local).await.unwrap();
+    let payment_option = client.get_payment_option("").unwrap();
+    let name = SecretKey::random().to_hex();
+    let (addressee, _) = client
+        .addressee_create(&name, payment_option.clone(), None)
+        .await
+        .unwrap();
+    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    let mut door_mat = client
+        .doormat_init(addressee.secret_key(), &name)
+        .await
+        .unwrap();
+    // test with nothing posted
+    assert!(door_mat.items().is_empty());
+    let you_have_got_mail = client.doormat_update(&mut door_mat).await.unwrap();
+    assert_eq!(you_have_got_mail, false);
+    // send loads of mail
+    let items_to_send = 1000;
+    let message = Bytes::from("Hello I'm you biggest fan!");
+    for i in 0..items_to_send {
+        client
+            .package_post(addressee.address(), message.clone(), payment_option.clone())
+            .await
+            .unwrap();
+        eprintln!("Posting no {i} at {:?}", SystemTime::now());
+    }
+    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    let you_have_got_mail = client.doormat_update(&mut door_mat).await.unwrap();
+    assert_eq!(you_have_got_mail, true);
+    assert_eq!(door_mat.items().len(), items_to_send);
+    assert_eq!(
+        door_mat.items().first().unwrap().payload().unwrap(),
+        message
+    );
+    assert_eq!(door_mat.items().last().unwrap().payload().unwrap(), message);
+}

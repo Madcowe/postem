@@ -94,6 +94,10 @@ impl PostemClient {
             location.to_bytes(), // location needs to be here so next one can be derived if jupmed to
             vec![(public_key.clone(), addr.xorname().0)],
         );
+        // if location is used (as it may have been since the route was got) then it needs to find
+        // next availabel location and try again...probably several times
+        // if it fails it should pass back the seal so application can choose to reuse it in it's
+        // handeling of the addresse being to busy to manager to post something
         let (address_cost, _) = self
             .client
             .graph_entry_put(address.clone(), payment_option.clone())
@@ -175,8 +179,8 @@ impl PostemClient {
 
 mod tests {
     use super::*;
+    use crate::addressee::PostemName;
     use crate::client::ConnectionType;
-    use crate::{addressee::PostemName, package};
     use autonomi::{Bytes, GraphEntryAddress};
 
     #[tokio::test]
@@ -206,10 +210,10 @@ mod tests {
             .await;
         assert_eq!(
             package,
-            Err(PostemError::NameAlreadyExists(
-                GraphEntryAddress::new(location.public_key()).to_hex(),
-                None
-            ))
+            Err(PostemError::GraphEntryError(format!(
+                "Entry already exists at this address: {}",
+                GraphEntryAddress::new(location.public_key()).to_hex()
+            ),),)
         );
         Ok(())
     }

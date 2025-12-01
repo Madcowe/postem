@@ -14,6 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+use autonomi::ChunkAddress;
 use autonomi::client::GetError;
 use autonomi::client::PutError;
 use autonomi::client::quote::CostError;
@@ -61,16 +62,21 @@ pub enum PostemError {
     InvalidLastReceived,
     #[error("Postem address does not exist: {0}")]
     InvalidAddress(String),
+    #[error(
+        "Storage location repeatdily being used before pacakge is fully posted, chunk address of seal included for resuse"
+    )]
+    ChasingItsTail(ChunkAddress),
 }
+// this should'nt automatically convert as non addresses base function could return the graph error
 impl From<GraphError> for PostemError {
     fn from(e: GraphError) -> Self {
-        match e {
-            GraphError::AlreadyExists(a) => PostemError::NameAlreadyExists(a.to_hex(), None),
-            _ => {
-                let message = format!("{e}");
-                PostemError::GraphEntryError(message)
-            }
-        }
+        // match e {
+        //     GraphError::AlreadyExists(a) => PostemError::NameAlreadyExists(a.to_hex(), None),
+        //     _ => {
+        let message = format!("{e}");
+        PostemError::GraphEntryError(message)
+        //     }
+        // }
     }
 }
 

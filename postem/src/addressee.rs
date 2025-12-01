@@ -22,7 +22,6 @@ use autonomi::graph::GraphError;
 use autonomi::pointer::PointerTarget;
 use autonomi::{
     AttoTokens, Bytes, Chunk, GraphEntry, GraphEntryAddress, PointerAddress, PublicKey, SecretKey,
-    XorName,
 };
 use blsttc::Ciphertext;
 use blsttc::rand;
@@ -152,7 +151,7 @@ impl PostemClient {
         address: SecretKey,
         last_received_pk: &PublicKey,
         payment_option: PaymentOption,
-    ) -> Result<PostemBase, PostemError> {
+    ) -> Result<(PostemBase, AttoTokens), PostemError> {
         let index = DerivationIndex::random(&mut rand::thread_rng());
         let base = GraphEntry::new(
             &address,
@@ -160,10 +159,18 @@ impl PostemClient {
             index.into_bytes(),
             vec![],
         );
-        self.client
+        let (cost, _addr) = match self
+            .client
             .graph_entry_put(base.clone(), payment_option)
-            .await?;
-        Ok(PostemBase(base))
+            .await
+        {
+            Ok(base) => base,
+            Err(GraphError::AlreadyExists(addr)) => {
+                return Err(PostemError::NameAlreadyExists(addr.to_hex(), None));
+            }
+            Err(e) => return Err(e.into()),
+        };
+        Ok((PostemBase(base), cost))
     }
 
     pub async fn base_get(&self, name: PostemName) -> Result<PostemBase, PostemError> {
@@ -237,7 +244,8 @@ impl PostemClient {
         name: &str,
         payment_option: PaymentOption,
         last_received_key: Option<SecretKey>,
-    ) -> Result<Addressee, PostemError> {
+    ) -> Result<(Addressee, AttoTokens), PostemError> {
+        let mut cost = AttoTokens::zero();
         let address = PostemName::create(&name)?;
         let base_sk = address.derive_key()?;
         let base_pk = base_sk.public_key();
@@ -255,14 +263,15 @@ impl PostemClient {
             }
             None => {
                 let secret_key = SecretKey::random();
-                let (_, pointer_address) = self
+                let (pointer_cost, pointer_address) = self
                     .client
                     .pointer_create(&secret_key, target, payment_option.clone())
                     .await?;
+                cost = cost.checked_add(pointer_cost).unwrap_or(AttoTokens::zero());
                 (secret_key, pointer_address)
             }
         };
-        let base = match self
+        let (base, base_cost) = match self
             .base_create(base_sk, &secret_key.public_key(), payment_option.clone())
             .await
         {
@@ -274,14 +283,19 @@ impl PostemClient {
             ))?,
             Err(e) => Err(e)?,
         };
-        Ok(Addressee {
-            address,
-            secret_key,
-            base,
-            last_received: pointer_address,
-        })
+        let cost = cost.checked_add(base_cost).unwrap_or(AttoTokens::zero());
+        Ok((
+            Addressee {
+                address,
+                secret_key,
+                base,
+                last_received: pointer_address,
+            },
+            cost,
+        ))
     }
 
+    /// estimate cost of creating an addressee
     pub async fn addressee_cost(&self, name: &str) -> Result<AttoTokens, PostemError> {
         let address = PostemName::create(&name)?;
         let graph_key = address.derive_key()?.public_key();
@@ -478,7 +492,7 @@ mod tests {
         let name = "my.address";
         // let estimate = client.addressee_cost(&name).await?;
         // eprintln!("Estimate: {:?}", estimate);
-        let addressee = client
+        let (addressee, _) = client
             .addressee_create(name, payment_option.clone(), None)
             .await?;
         let derived_name = PostemName::create(name).unwrap();
@@ -503,7 +517,7 @@ mod tests {
             .pointer_create(&secret_key, target, payment_option.clone())
             .await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        let addressee = client
+        let (addressee, _) = client
             .addressee_create(
                 "my.address2",
                 payment_option.clone(),
@@ -524,7 +538,7 @@ mod tests {
         let mut client = PostemClient::init(ConnectionType::Local).await.unwrap();
         let payment_option = client.get_payment_option("").unwrap();
         let name = "my.address3";
-        let mut addressee = client
+        let (mut addressee, _) = client
             .addressee_create(name, payment_option.clone(), None)
             .await
             .unwrap();
@@ -567,7 +581,7 @@ mod tests {
         let mut client = PostemClient::init(ConnectionType::Local).await.unwrap();
         let payment_option = client.get_payment_option("").unwrap();
         let name = SecretKey::random().to_hex();
-        let mut addressee = client
+        let (mut addressee, _) = client
             .addressee_create(&name, payment_option.clone(), None)
             .await
             .unwrap();
@@ -602,7 +616,7 @@ mod tests {
         let mut client = PostemClient::init(ConnectionType::Local).await.unwrap();
         let payment_option = client.get_payment_option("").unwrap();
         let name = SecretKey::random().to_hex();
-        let mut addressee = client
+        let (mut addressee, _) = client
             .addressee_create(&name, payment_option.clone(), None)
             .await
             .unwrap();

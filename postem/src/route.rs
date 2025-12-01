@@ -181,7 +181,7 @@ mod tests {
     async fn location_get_available() -> Result<(), PostemError> {
         let client = PostemClient::init(ConnectionType::Local).await?;
         let payment_option = client.get_payment_option("")?;
-        let addressee = client
+        let (addressee, _) = client
             .addressee_create("test.address", payment_option.clone(), None)
             .await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
@@ -247,7 +247,7 @@ mod tests {
         // Assumes run from freshly started local client
         let client = PostemClient::init(ConnectionType::Local).await.unwrap();
         let payment_option = client.get_payment_option("").unwrap();
-        let addressee = client
+        let (addressee, _) = client
             .addressee_create("another.test.address", payment_option.clone(), None)
             .await
             .unwrap();
@@ -263,7 +263,7 @@ mod tests {
         let client = PostemClient::init(ConnectionType::Local).await.unwrap();
         let payment_option = client.get_payment_option("").unwrap();
         let name = SecretKey::random().to_hex();
-        let addressee = client
+        let (addressee, _) = client
             .addressee_create(&name, payment_option.clone(), None)
             .await
             .unwrap();
