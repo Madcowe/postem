@@ -142,7 +142,7 @@ impl PostemClient {
     /// that also does this (eg location_get_available) as you will miss most pacakges
     pub async fn route_get_packages(
         &self,
-        mut route: Route,
+        route: &mut Route,
     ) -> Result<Vec<(Package, SecretKey)>, PostemError> {
         let mut packages = Vec::new();
         // skip if at last received as don't need to return pacakge if already receieved
@@ -159,11 +159,14 @@ impl PostemClient {
 
     /// Returns the next location on the route that has not been used, so a package may be posted
     /// note the route current location is modified as the route is traversed
-    pub async fn location_get_available(&self, mut route: Route) -> Result<SecretKey, PostemError> {
+    pub async fn location_get_available(
+        &self,
+        route: &mut Route,
+    ) -> Result<SecretKey, PostemError> {
         while self.location_used(&route).await? {
             route.next();
         }
-        Ok(route.current_location)
+        Ok(route.current_location.clone())
     }
 }
 
@@ -193,8 +196,8 @@ mod tests {
             .await?;
         let index = DerivationIndex::from_bytes(graph_entry.content);
         let start_location = addressee.address().derive_key().unwrap();
-        let route = Route::new(addressee.base(), start_location.clone(), start_location);
-        let next_location = client.location_get_available(route.clone()).await?;
+        let mut route = Route::new(addressee.base(), start_location.clone(), start_location);
+        let next_location = client.location_get_available(&mut route).await?;
         assert_eq!(
             next_location.to_hex(),
             addressee
@@ -210,13 +213,14 @@ mod tests {
                     .parents
                     .first()
                     .expect("Base should always have a first item in parents"),
-                Bytes::from("Hello world!"),
-                payment_option.clone(),
+                &Bytes::from("Hello world!"),
+                &payment_option,
+                None,
             )
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        let next_location = client.location_get_available(route.clone()).await.unwrap();
+        let next_location = client.location_get_available(&mut route).await.unwrap();
         assert_eq!(
             next_location.to_hex(),
             SecretKey::from_bytes(package.address().content)
@@ -237,7 +241,7 @@ mod tests {
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        let next_location = client.location_get_available(route.clone()).await.unwrap();
+        let next_location = client.location_get_available(&mut route).await.unwrap();
         assert_eq!(next_location.to_hex(), location_after_next.to_hex());
         Ok(())
     }
@@ -272,8 +276,8 @@ mod tests {
         //     .await
         //     .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        let route = client.route_get(addressee.address(), true).await.unwrap();
-        let packages = client.route_get_packages(route).await.unwrap();
+        let mut route = client.route_get(addressee.address(), true).await.unwrap();
+        let packages = client.route_get_packages(&mut route).await.unwrap();
         assert!(packages.is_empty());
         let message = Bytes::from("Hello");
         let (_package, _attos) = client
@@ -285,8 +289,8 @@ mod tests {
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        let route = client.route_get(addressee.address(), true).await.unwrap();
-        let packages = client.route_get_packages(route).await.unwrap();
+        let mut route = client.route_get(addressee.address(), true).await.unwrap();
+        let packages = client.route_get_packages(&mut route).await.unwrap();
         assert_eq!(packages.len(), 2);
     }
 

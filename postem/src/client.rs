@@ -26,6 +26,7 @@ pub enum ConnectionType {
     Antnet,
 }
 
+#[derive(Clone)]
 pub struct PostemClient {
     pub(crate) connection_type: ConnectionType,
     pub(crate) client: Client,

@@ -16,11 +16,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 use autonomi::client::payment::PaymentOption;
+use autonomi::graph::GraphError;
 use autonomi::{AttoTokens, Bytes, Chunk, ChunkAddress, GraphEntry, PublicKey, SecretKey, XorName};
 
 use crate::addressee::PostemName;
 use crate::client::PostemClient;
 use crate::error::PostemError;
+
+/// the number of tims the crate will retry posting a package where the non address components
+/// have already been created, molstl likely because something else has been posted to the
+/// next available location sinc it was fetched, after this it will fai with ChasingItsTail
+/// which will contain the seal so that an application can attempt to handle this further
+const NUMBER_OF_RETRIES_TO_POST_SEMI_CREATED_PACKAGE: u32 = 10;
 
 #[derive(Debug, PartialEq)]
 pub enum PackageState {
@@ -75,33 +82,45 @@ impl PostemClient {
         &self,
         location: &SecretKey,
         public_key: &PublicKey,
-        payload: Bytes,
-        payment_option: PaymentOption,
+        payload: &Bytes,
+        payment_option: &PaymentOption,
+        seal: Option<Chunk>, // so if function previously create seal but couldn't do the graph it can try again
     ) -> Result<(Package, AttoTokens), PostemError> {
-        let (payload_cost, data_map) = self
-            .client
-            .data_put(payload.clone(), payment_option.clone())
-            .await?;
-        let seal = Chunk::new(
-            // Bytes::from(
-            // public_key.encrypt(data_map.to_hex()).to_bytes(),
-            Bytes::from(public_key.encrypt(data_map.0.value).to_bytes()),
-        );
-        let (seal_cost, addr) = self.client.chunk_put(&seal, payment_option.clone()).await?;
+        let (seal, addr, payload_cost, seal_cost) = if seal.is_none() {
+            let (payload_cost, data_map) = self
+                .client
+                .data_put(payload.clone(), payment_option.clone())
+                .await?;
+            let seal = Chunk::new(
+                // Bytes::from(
+                // public_key.encrypt(data_map.to_hex()).to_bytes(),
+                Bytes::from(public_key.encrypt(data_map.0.value).to_bytes()),
+            );
+            let (seal_cost, addr) = self.client.chunk_put(&seal, payment_option.clone()).await?;
+            (seal, addr, payload_cost, seal_cost)
+        } else {
+            (
+                seal.clone().unwrap(),
+                *seal.unwrap().address(),
+                AttoTokens::zero(),
+                AttoTokens::zero(),
+            )
+        };
         let address = GraphEntry::new(
             &location,
             vec![],
             location.to_bytes(), // location needs to be here so next one can be derived if jupmed to
             vec![(public_key.clone(), addr.xorname().0)],
         );
-        // if location is used (as it may have been since the route was got) then it needs to find
-        // next availabel location and try again...probably several times
-        // if it fails it should pass back the seal so application can choose to reuse it in it's
-        // handeling of the addresse being to busy to manager to post something
-        let (address_cost, _) = self
+        let (address_cost, _) = match self
             .client
             .graph_entry_put(address.clone(), payment_option.clone())
-            .await?;
+            .await
+        {
+            Ok(ok) => ok,
+            Err(GraphError::AlreadyExists(_)) => return Err(PostemError::ChasingItsTail(seal)),
+            Err(e) => Err(e)?,
+        };
         let cost = payload_cost
             .checked_add(seal_cost)
             .unwrap_or(AttoTokens::zero())
@@ -111,8 +130,7 @@ impl PostemClient {
             Package {
                 address,
                 seal,
-                payload: Some(payload),
-                // cost,
+                payload: Some(payload.clone()),
             },
             cost,
         ))
@@ -123,7 +141,7 @@ impl PostemClient {
         payload: Bytes,
         location_pk: &PublicKey,
     ) -> Result<AttoTokens, PostemError> {
-        let mut cost = self.client.data_cost(payload).await?;
+        let cost = self.client.data_cost(payload).await?;
         // hmm this will probably return 0 is someone actually stores a chunk full of zeros
         cost.checked_add(
             self.client
@@ -144,11 +162,34 @@ impl PostemClient {
         content: Bytes,
         payment_option: PaymentOption,
     ) -> Result<(Package, AttoTokens), PostemError> {
-        let route = self.route_get(postem_name, false).await?;
+        let mut route = self.route_get(postem_name, false).await?;
         let base = route.base();
-        let location = self.location_get_available(route).await?;
-        self.package_create(&location, &base.public_key(), content, payment_option)
-            .await
+        let mut seal = None;
+        for i in 0..NUMBER_OF_RETRIES_TO_POST_SEMI_CREATED_PACKAGE {
+            eprintln!("Retrying posting package {i}");
+            let location = self.location_get_available(&mut route).await?;
+            // if location is used (as it may have been since the route was got) then it needs to find
+            // next availabel location and try again...probably several times
+            // if it fails it should pass back the seal so application can choose to reuse it in it's
+            // handeling of the addresse being to busy to manager to post something
+            match self
+                .package_create(
+                    &location,
+                    &base.public_key(),
+                    &content,
+                    &payment_option,
+                    seal,
+                )
+                .await
+            {
+                Ok(ok) => return Ok(ok),
+                Err(PostemError::ChasingItsTail(returned_seal)) => seal = Some(returned_seal),
+                Err(e) => return Err(e),
+            }
+        }
+        Err(PostemError::ChasingItsTail(
+            seal.expect("Seal should already exist by this point"),
+        ))
     }
 
     /// Uses the address graph entry to retrieve the encryped data map and return a sealed package
@@ -181,7 +222,7 @@ mod tests {
     use super::*;
     use crate::addressee::PostemName;
     use crate::client::ConnectionType;
-    use autonomi::{Bytes, GraphEntryAddress};
+    use autonomi::Bytes;
 
     #[tokio::test]
     async fn package_create() -> Result<(), PostemError> {
@@ -191,30 +232,25 @@ mod tests {
         let location = SecretKey::random();
         let payload = Bytes::from("Dear world");
         let package = client
-            .package_create(
-                &location,
-                &public_key,
-                payload.clone(),
-                payment_option.clone(),
-            )
+            .package_create(&location, &public_key, &payload, &payment_option, None)
             .await;
         assert!(package.is_ok());
+        let seal = package.unwrap().0.seal();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let package = client
+            .package_create(&location, &public_key, &payload, &payment_option, None)
+            .await;
+        assert!(package.is_err());
         let package = client
             .package_create(
                 &location,
                 &public_key,
-                payload.clone(),
-                payment_option.clone(),
+                &payload,
+                &payment_option,
+                Some(seal.clone()),
             )
             .await;
-        assert_eq!(
-            package,
-            Err(PostemError::GraphEntryError(format!(
-                "Entry already exists at this address: {}",
-                GraphEntryAddress::new(location.public_key()).to_hex()
-            ),),)
-        );
+        assert_eq!(package, Err(PostemError::ChasingItsTail(seal)));
         Ok(())
     }
 

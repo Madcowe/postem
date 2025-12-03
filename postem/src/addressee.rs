@@ -361,10 +361,10 @@ impl PostemClient {
         addressee: &mut Addressee,
         derive_from_base: bool,
     ) -> Result<Vec<Package>, PostemError> {
-        let route = self
+        let mut route = self
             .route_get(addressee.address(), derive_from_base)
             .await?;
-        let packages = self.route_get_packages(route).await?;
+        let packages = self.route_get_packages(&mut route).await?;
         Ok(packages.iter().map(|p| p.0.clone()).collect())
     }
 
@@ -598,7 +598,7 @@ mod tests {
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        let got_graph = client
+        let _got_graph = client
             .client
             .graph_entry_get(&package.address().address())
             .await

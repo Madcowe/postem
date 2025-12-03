@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-use autonomi::ChunkAddress;
+use autonomi::Chunk;
 use autonomi::client::GetError;
 use autonomi::client::PutError;
 use autonomi::client::quote::CostError;
@@ -65,7 +65,7 @@ pub enum PostemError {
     #[error(
         "Storage location repeatdily being used before pacakge is fully posted, chunk address of seal included for resuse"
     )]
-    ChasingItsTail(ChunkAddress),
+    ChasingItsTail(Chunk),
 }
 // this should'nt automatically convert as non addresses base function could return the graph error
 impl From<GraphError> for PostemError {
