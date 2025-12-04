@@ -14,3 +14,31 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+use postem::{Addressee, DoorMat, Package, PostemClient, addressee::PostemName};
+
+enum AppState {
+    None,
+    CreateAddresseei(CreateAddresseeState),
+    SendPackagee(SendPackageStatus),
+    ViewDoormat,
+    ViewPackage,
+}
+
+enum CreateAddresseeState {
+    InputAddresseeName,
+    InputFundingWalled,
+}
+
+enum SendPackageStatus {
+    InputRecipients,
+    InputMessage,
+    InputFundingWallet,
+}
+
+struct App {
+    app_state: AppState,
+    client: PostemClient,
+    doormat: Option<DoorMat>,
+    recipients: Vec<PostemName>,
+    package: Option<Package>,
+}
