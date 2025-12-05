@@ -4700,6 +4700,7 @@ dependencies = [
 name = "postie"
 version = "0.1.0"
 dependencies = [
+ "autonomi",
  "postem",
  "ratatui",
  "tokio",

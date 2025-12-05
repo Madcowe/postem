@@ -140,20 +140,33 @@ impl PostemClient {
         &self,
         payload: Bytes,
         location_pk: &PublicKey,
+        number_of_recipients: usize,
     ) -> Result<AttoTokens, PostemError> {
         let cost = self.client.data_cost(payload).await?;
-        // hmm this will probably return 0 is someone actually stores a chunk full of zeros
-        cost.checked_add(
-            self.client
-                .chunk_cost(
-                    Chunk::new(Bytes::copy_from_slice(&[0u8; Chunk::MAX_RAW_SIZE])).address(),
+        let mut posting_cost = AttoTokens::zero();
+        if number_of_recipients > 0 {
+            // hmm this will probably return 0 is someone actually stores a chunk full of zeros
+            posting_cost = posting_cost
+                .checked_add(
+                    self.client
+                        .chunk_cost(
+                            Chunk::new(Bytes::copy_from_slice(&[0u8; Chunk::MAX_RAW_SIZE]))
+                                .address(),
+                        )
+                        .await?,
                 )
-                .await?,
-        )
-        .unwrap_or(AttoTokens::zero());
-        cost.checked_add(self.client.graph_entry_cost(location_pk).await?)
-            .unwrap_or(AttoTokens::zero());
-        Ok(cost)
+                .unwrap_or(AttoTokens::zero());
+            posting_cost = posting_cost
+                .checked_add(self.client.graph_entry_cost(location_pk).await?)
+                .unwrap_or(AttoTokens::zero());
+            // multiply posting cost by number of recipients
+            for _ in 1..number_of_recipients {
+                posting_cost = posting_cost
+                    .checked_add(posting_cost)
+                    .unwrap_or(AttoTokens::zero());
+            }
+        };
+        Ok(cost.checked_add(posting_cost).unwrap_or(AttoTokens::zero()))
     }
 
     pub async fn package_post(
@@ -223,6 +236,7 @@ mod tests {
     use crate::addressee::PostemName;
     use crate::client::ConnectionType;
     use autonomi::Bytes;
+    use autonomi::self_encryption::MAX_CHUNK_SIZE;
 
     #[tokio::test]
     async fn package_create() -> Result<(), PostemError> {
@@ -273,5 +287,28 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let got_package = client.package_get(package.clone().address).await.unwrap();
         assert_eq!(got_package.0.seal(), package.seal());
+    }
+
+    #[tokio::test]
+    async fn package_cost() {
+        let client = PostemClient::init(ConnectionType::Local).await.unwrap();
+        let payload = Bytes::from("How much do I cost?");
+        let location_pk = SecretKey::random().public_key();
+        let just_payload_cost = client
+            .package_cost(payload.clone(), &location_pk, 0)
+            .await
+            .unwrap();
+        let cost_for_one = client
+            .package_cost(payload.clone(), &location_pk, 1)
+            .await
+            .unwrap();
+        let cost_for_two = client.package_cost(payload, &location_pk, 2).await.unwrap();
+        eprintln!(
+            "Just payload: {}\nWith one recipient: {}\nWith two recipients: {}",
+            just_payload_cost, cost_for_one, cost_for_two
+        );
+        let postage_cost = cost_for_one.checked_sub(just_payload_cost).unwrap();
+        let calcualted_cost_for_two = cost_for_one.checked_add(postage_cost).unwrap();
+        assert_eq!(cost_for_two, calcualted_cost_for_two);
     }
 }
