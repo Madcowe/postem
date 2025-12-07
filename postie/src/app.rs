@@ -14,16 +14,19 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-use autonomi::AttoTokens;
 use autonomi::client::payment::PaymentOption;
+use autonomi::{AttoTokens, Bytes};
 use postem::{
     Addressee, ConnectionType, DoorMat, Package, PostemClient, PostemError, addressee::PostemName,
 };
 
+use crate::theme::Theme;
+
 enum AppState {
+    About,
     None,
     CreateAddresseei(CreateAddresseeState),
-    SendPackagee(SendPackageStatus),
+    PostPackagee(PostPackageStatus),
     ViewDoormat,
     ViewPackage,
 }
@@ -45,33 +48,33 @@ impl CreateAddresseeState {
     }
 }
 
-enum SendPackageStatus {
+enum PostPackageStatus {
     InputRecipients,
     InputMessage,
     InputFundingWallet,
 }
-impl SendPackageStatus {
+impl PostPackageStatus {
     pub fn toggle(&mut self, fowards: bool) {
         match self {
-            SendPackageStatus::InputRecipients => {
+            PostPackageStatus::InputRecipients => {
                 *self = if fowards {
-                    SendPackageStatus::InputMessage
+                    PostPackageStatus::InputMessage
                 } else {
-                    SendPackageStatus::InputFundingWallet
+                    PostPackageStatus::InputFundingWallet
                 }
             }
-            SendPackageStatus::InputMessage => {
+            PostPackageStatus::InputMessage => {
                 *self = if fowards {
-                    SendPackageStatus::InputFundingWallet
+                    PostPackageStatus::InputFundingWallet
                 } else {
-                    SendPackageStatus::InputRecipients
+                    PostPackageStatus::InputRecipients
                 }
             }
-            SendPackageStatus::InputFundingWallet => {
+            PostPackageStatus::InputFundingWallet => {
                 *self = if fowards {
-                    SendPackageStatus::InputRecipients
+                    PostPackageStatus::InputRecipients
                 } else {
-                    SendPackageStatus::InputMessage
+                    PostPackageStatus::InputMessage
                 }
             }
         }
@@ -81,9 +84,15 @@ impl SendPackageStatus {
 struct App {
     app_state: AppState,
     client: PostemClient,
+    theme: Theme,
     door_mat: Option<DoorMat>,
     recipients: Vec<PostemName>,
-    package: Option<Package>,
+    payload: Option<Bytes>,
+    post_recipients_input: String,
+    post_message_input: String,
+    post_key_input: String,
+    create_name_input: String,
+    create_key_input: String,
 }
 impl App {
     pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
@@ -91,9 +100,15 @@ impl App {
         Ok(App {
             app_state: AppState::None,
             client,
+            theme: Theme::surf_bored_synth_wave(),
             door_mat: None,
             recipients: vec![],
-            package: None,
+            payload: None,
+            post_recipients_input: String::new(),
+            post_message_input: String::new(),
+            post_key_input: String::new(),
+            create_name_input: String::new(),
+            create_key_input: String::new(),
         })
     }
 
@@ -133,7 +148,8 @@ impl App {
         }
     }
 
-    /// Returns a vector of all existing recipients
+    /// Returns a vector of all existing recipients, but only in terms of the key being used
+    /// potentially you might want to check it is a valid postem address
     pub async fn check_recipients_exists<'a>(
         &self,
         names: Vec<&'a str>,
@@ -151,7 +167,104 @@ impl App {
         Ok(existing_names)
     }
 
-    // pub async fn estimate_postage(&self, pacakge: Package, no_of_recipients: usize) -> Result<AttoTokens, PostemError> {
+    // Return a vector of postem names for valid recipients plus a vector of any invalid names
+    pub async fn check_recipients<'a>(
+        &self,
+        names: Vec<&'a str>,
+    ) -> Result<(Vec<PostemName>, Vec<&'a str>), PostemError> {
+        let valid_names = self.check_recipients_exists(names.clone()).await?;
+        // let invalid_names = invalid_recipients(names, valid_names.clone());
+        let invalid_names = subtract_vector(names, valid_names.clone());
+        let mut postem_names = Vec::with_capacity(valid_names.len());
+        for valid_name in valid_names {
+            postem_names.push(PostemName::create(valid_name)?);
+        }
+        Ok((postem_names, invalid_names))
+    }
 
+    // pub async post_pacakges(&self, payload: Bytes)
+
+    // pub async fn estimate_postage(&self, payload: Bytes, no_of_recipients: usize) -> Result<AttoTokens, PostemError> {
+    //     self.client.package_cost(payload,)
     // }
+}
+
+/// Returns a vector of the element in vector a that were not present in vector b
+pub fn subtract_vector<'a, T: PartialEq + ?Sized>(a: Vec<&'a T>, b: Vec<&'a T>) -> Vec<&'a T> {
+    let mut not_in_vector_b = Vec::with_capacity(a.len());
+    for a_element in a {
+        let mut element_present = false;
+        for b_element in &b {
+            if a_element == *b_element {
+                element_present = true;
+                break;
+            }
+        }
+        if !element_present {
+            not_in_vector_b.push(a_element);
+        }
+    }
+    not_in_vector_b
+}
+
+pub fn invalid_recipients<'a>(names: Vec<&'a str>, valid_names: Vec<&'a str>) -> Vec<&'a str> {
+    let mut invalid_names = Vec::with_capacity(names.len());
+    for name in names {
+        let mut name_is_valid = false;
+        for valid_name in &valid_names {
+            if name == *valid_name {
+                name_is_valid = true;
+                break;
+            }
+        }
+        if !name_is_valid {
+            invalid_names.push(name);
+        }
+    }
+    invalid_names
+}
+
+#[cfg(test)]
+
+mod tests {
+
+    use crate::app::invalid_recipients;
+
+    use super::*;
+
+    #[test]
+    pub fn test_subtract_vector() {
+        let names = vec!["Eliza", "Elphine", "Pippy"];
+        let valid_names = vec!["Eliza", "Pippy"];
+        let invalid_names = subtract_vector(names, valid_names);
+        assert_eq!(invalid_names, vec!["Elphine"]);
+    }
+
+    #[test]
+    pub fn test_invalid_recipients() {
+        let names = vec!["Eliza", "Elphine", "Pippy"];
+        let valid_names = vec!["Eliza", "Pippy"];
+        let invalid_names = invalid_recipients(names, valid_names);
+        assert_eq!(invalid_names, vec!["Elphine"]);
+    }
+
+    #[tokio::test]
+    // Assumes run from freshly started local client
+    pub async fn check_recipients() {
+        let client = PostemClient::init(ConnectionType::Local).await.unwrap();
+        let payment_option = client.get_payment_option("").unwrap();
+        let name = "Eliza";
+        let _addressee = client
+            .addressee_create(name, payment_option, None)
+            .await
+            .unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let app = App::create(ConnectionType::Local).await.unwrap();
+        let (valid_names, invalid_names) = app
+            .check_recipients(vec!["Eliza", "Elphine", "Pippy"])
+            .await
+            .unwrap();
+        assert_eq!(valid_names, vec![PostemName::create(name).unwrap()]);
+        assert_eq!(invalid_names, vec!["Elphine", "Pippy"]);
+    }
 }
