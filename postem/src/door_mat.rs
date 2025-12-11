@@ -18,6 +18,7 @@ use crate::{Addressee, Package, PostemClient, PostemError, addressee::PostemName
 use autonomi::SecretKey;
 
 /// A collection of all valid open pacakges for an addressee
+#[derive(Clone, Debug, PartialEq)]
 pub struct DoorMat {
     addressee: Addressee,
     items: Vec<Package>,

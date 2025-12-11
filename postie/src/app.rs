@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 use autonomi::client::payment::PaymentOption;
-use autonomi::{AttoTokens, Bytes};
+use autonomi::{AttoTokens, Bytes, SecretKey};
 use postem::{
     Addressee, ConnectionType, DoorMat, Package, PostemClient, PostemError, addressee::PostemName,
 };
@@ -82,12 +82,13 @@ impl PostPackageStatus {
 }
 
 struct App {
+    connection_type: ConnectionType,
     app_state: AppState,
     client: PostemClient,
     theme: Theme,
     door_mat: Option<DoorMat>,
-    recipients: Vec<PostemName>,
-    payload: Option<Bytes>,
+    // recipients: Vec<PostemName>,
+    // payload: Option<Bytes>,
     post_recipients_input: String,
     post_message_input: String,
     post_key_input: String,
@@ -98,12 +99,13 @@ impl App {
     pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
         let client = PostemClient::init(connection_type).await?;
         Ok(App {
+            connection_type,
             app_state: AppState::None,
             client,
             theme: Theme::surf_bored_synth_wave(),
             door_mat: None,
-            recipients: vec![],
-            payload: None,
+            // recipients: vec![],
+            // payload: None,
             post_recipients_input: String::new(),
             post_message_input: String::new(),
             post_key_input: String::new(),
@@ -139,6 +141,23 @@ impl App {
         Ok(cost)
     }
 
+    pub async fn import_addressee(
+        &mut self,
+        name: &str,
+        private_key: &str,
+    ) -> Result<(), PostemError> {
+        let addressee = self
+            .client
+            .addressee_get(SecretKey::from_hex(private_key)?, PostemName::create(name)?)
+            .await?;
+        self.door_mat = Some(
+            self.client
+                .doormat_init(addressee.secret_key(), name)
+                .await?,
+        );
+        Ok(())
+    }
+
     /// Check for and receives any new items
     pub async fn update_doormat(&mut self) -> Result<bool, PostemError> {
         if let Some(ref mut door_mat) = self.door_mat {
@@ -167,7 +186,7 @@ impl App {
         Ok(existing_names)
     }
 
-    // Return a vector of postem names for valid recipients plus a vector of any invalid names
+    /// Return a vector of postem names for valid recipients plus a vector of any invalid names
     pub async fn check_recipients<'a>(
         &self,
         names: Vec<&'a str>,
@@ -182,11 +201,36 @@ impl App {
         Ok((postem_names, invalid_names))
     }
 
-    // pub async post_pacakges(&self, payload: Bytes)
+    pub async fn estimate_postage(
+        &self,
+        payload: Bytes,
+        no_of_recipients: usize,
+    ) -> Result<AttoTokens, PostemError> {
+        self.client.package_cost(payload, no_of_recipients).await
+    }
 
-    // pub async fn estimate_postage(&self, payload: Bytes, no_of_recipients: usize) -> Result<AttoTokens, PostemError> {
-    //     self.client.package_cost(payload,)
-    // }
+    /// returns a vector of any recipients where posting failed plus the total cost
+    pub async fn post_packages(
+        &self,
+        recipients: Vec<PostemName>,
+        payload: Bytes,
+        private_key: &str,
+    ) -> Result<(Vec<PostemName>, AttoTokens), PostemError> {
+        let mut cost = AttoTokens::zero();
+        let mut failed_recipients = Vec::with_capacity(recipients.len());
+        let payment_option = self.client.get_payment_option(private_key)?;
+        for recipient in recipients {
+            match self
+                .client
+                .package_post(recipient.clone(), payload.clone(), payment_option.clone())
+                .await
+            {
+                Ok((_, package_cost)) => cost = cost.checked_add(package_cost).unwrap_or(cost),
+                Err(_) => failed_recipients.push(recipient),
+            }
+        }
+        Ok((failed_recipients, cost))
+    }
 }
 
 /// Returns a vector of the element in vector a that were not present in vector b
@@ -249,7 +293,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // Assumes run from freshly started local client
     pub async fn check_recipients() {
         let client = PostemClient::init(ConnectionType::Local).await.unwrap();
         let payment_option = client.get_payment_option("").unwrap();
@@ -266,5 +309,50 @@ mod tests {
             .unwrap();
         assert_eq!(valid_names, vec![PostemName::create(name).unwrap()]);
         assert_eq!(invalid_names, vec!["Elphine", "Pippy"]);
+    }
+
+    #[tokio::test]
+    pub async fn estimate_and_post_packages() {
+        let mut app = App::create(ConnectionType::Local).await.unwrap();
+        // let client = PostemClient::init(ConnectionType::Local).await.unwrap();
+        let payment_option = app.client.get_payment_option("").unwrap();
+        let mut recipients = vec![];
+        for _ in 0..2 {
+            recipients.push(
+                app.client
+                    .addressee_create(&SecretKey::random().to_hex(), payment_option.clone(), None)
+                    .await
+                    .unwrap()
+                    .0,
+            );
+        }
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let message = Bytes::from("Could I interest you in these fine leather jackets?");
+        let estimate = app.estimate_postage(message.clone(), 2).await.unwrap();
+        // add non existing address
+        let name = PostemName::create("nobody").unwrap();
+        let mut recipient_names: Vec<PostemName> = recipients.iter().map(|r| r.address()).collect();
+        recipient_names.push(name.clone());
+        let (failed_recipients, cost) = app
+            .post_packages(recipient_names, message.clone(), "")
+            .await
+            .unwrap();
+        eprintln!("Estimate: {} Actual: {}", estimate, cost);
+        assert_eq!(failed_recipients, vec![name]);
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        let mut packages = Vec::with_capacity(recipients.len());
+        for recipient in recipients {
+            app.import_addressee(
+                &recipient.address().name(),
+                &recipient.secret_key().to_hex(),
+            )
+            .await
+            .unwrap();
+            packages.append(&mut app.door_mat.clone().unwrap().items());
+        }
+        for package in packages {
+            eprintln!("{:?}", package.payload());
+            assert_eq!(package.payload().unwrap(), message);
+        }
     }
 }

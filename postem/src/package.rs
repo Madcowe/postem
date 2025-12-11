@@ -49,6 +49,10 @@ impl Package {
         self.address.clone()
     }
 
+    pub fn public_key(&self) -> PublicKey {
+        self.address.owner
+    }
+
     pub fn status(&self) -> PackageState {
         if self.payload.is_some() {
             PackageState::Open
@@ -139,7 +143,7 @@ impl PostemClient {
     pub async fn package_cost(
         &self,
         payload: Bytes,
-        location_pk: &PublicKey,
+        // location_pk: &PublicKey,
         number_of_recipients: usize,
     ) -> Result<AttoTokens, PostemError> {
         let cost = self.client.data_cost(payload).await?;
@@ -157,7 +161,11 @@ impl PostemClient {
                 )
                 .unwrap_or(AttoTokens::zero());
             posting_cost = posting_cost
-                .checked_add(self.client.graph_entry_cost(location_pk).await?)
+                .checked_add(
+                    self.client
+                        .graph_entry_cost(&SecretKey::random().public_key())
+                        .await?,
+                )
                 .unwrap_or(AttoTokens::zero());
             // multiply posting cost by number of recipients
             for _ in 1..number_of_recipients {
@@ -293,16 +301,10 @@ mod tests {
     async fn package_cost() {
         let client = PostemClient::init(ConnectionType::Local).await.unwrap();
         let payload = Bytes::from("How much do I cost?");
-        let location_pk = SecretKey::random().public_key();
-        let just_payload_cost = client
-            .package_cost(payload.clone(), &location_pk, 0)
-            .await
-            .unwrap();
-        let cost_for_one = client
-            .package_cost(payload.clone(), &location_pk, 1)
-            .await
-            .unwrap();
-        let cost_for_two = client.package_cost(payload, &location_pk, 2).await.unwrap();
+        // let location_pk = SecretKey::random().public_key();
+        let just_payload_cost = client.package_cost(payload.clone(), 0).await.unwrap();
+        let cost_for_one = client.package_cost(payload.clone(), 1).await.unwrap();
+        let cost_for_two = client.package_cost(payload, 2).await.unwrap();
         eprintln!(
             "Just payload: {}\nWith one recipient: {}\nWith two recipients: {}",
             just_payload_cost, cost_for_one, cost_for_two
