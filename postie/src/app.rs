@@ -22,16 +22,18 @@ use postem::{
 
 use crate::theme::Theme;
 
-enum AppState {
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum AppState {
     About,
     None,
-    CreateAddresseei(CreateAddresseeState),
-    PostPackagee(PostPackageStatus),
+    CreateAddressee(CreateAddresseeState),
+    PostPackagee(PostPackageState),
     ViewDoormat,
     ViewPackage,
 }
 
-enum CreateAddresseeState {
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum CreateAddresseeState {
     InputAddresseeName,
     InputFundingWalled,
 }
@@ -48,40 +50,41 @@ impl CreateAddresseeState {
     }
 }
 
-enum PostPackageStatus {
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum PostPackageState {
     InputRecipients,
     InputMessage,
     InputFundingWallet,
 }
-impl PostPackageStatus {
+impl PostPackageState {
     pub fn toggle(&mut self, fowards: bool) {
         match self {
-            PostPackageStatus::InputRecipients => {
+            PostPackageState::InputRecipients => {
                 *self = if fowards {
-                    PostPackageStatus::InputMessage
+                    PostPackageState::InputMessage
                 } else {
-                    PostPackageStatus::InputFundingWallet
+                    PostPackageState::InputFundingWallet
                 }
             }
-            PostPackageStatus::InputMessage => {
+            PostPackageState::InputMessage => {
                 *self = if fowards {
-                    PostPackageStatus::InputFundingWallet
+                    PostPackageState::InputFundingWallet
                 } else {
-                    PostPackageStatus::InputRecipients
+                    PostPackageState::InputRecipients
                 }
             }
-            PostPackageStatus::InputFundingWallet => {
+            PostPackageState::InputFundingWallet => {
                 *self = if fowards {
-                    PostPackageStatus::InputRecipients
+                    PostPackageState::InputRecipients
                 } else {
-                    PostPackageStatus::InputMessage
+                    PostPackageState::InputMessage
                 }
             }
         }
     }
 }
 
-struct App {
+pub struct App {
     connection_type: ConnectionType,
     app_state: AppState,
     client: PostemClient,
@@ -96,6 +99,10 @@ struct App {
     create_key_input: String,
 }
 impl App {
+    pub fn change_state(&mut self, app_state: AppState) {
+        self.app_state = app_state;
+    }
+
     pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
         let client = PostemClient::init(connection_type).await?;
         Ok(App {
