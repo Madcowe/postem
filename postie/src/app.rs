@@ -22,17 +22,17 @@ use postem::{
 
 use crate::theme::Theme;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum AppState {
     About,
     None,
     CreateAddressee(CreateAddresseeState),
-    PostPackagee(PostPackageState),
+    PostPackage(PostPackageState),
     ViewDoormat,
     ViewPackage,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum CreateAddresseeState {
     InputAddresseeName,
     InputFundingWalled,
@@ -50,7 +50,7 @@ impl CreateAddresseeState {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PostPackageState {
     InputRecipients,
     InputMessage,
@@ -101,6 +101,10 @@ pub struct App {
 impl App {
     pub fn change_state(&mut self, app_state: AppState) {
         self.app_state = app_state;
+    }
+
+    pub fn app_state(&self) -> AppState {
+        self.app_state
     }
 
     pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
