@@ -58,22 +58,27 @@ fn none_to_post(app: &mut App) {
 
 // move back to using 2d hashmap as then can return all Inputs of each state
 pub struct AppInteractions {
-    pub interactions: HashMap<Interaction, Action>,
+    pub interactions: HashMap<AppState, HashMap<InputType, Action>>,
 }
 impl AppInteractions {
     pub fn new() -> AppInteractions {
+        let mut interactions = HashMap::new();
         // From AppState::None
+        let mut actions = HashMap::new();
         let app_state = AppState::None;
         let input = InputType::create_key_press(KeyCode::Char('p'), KeyModifiers::empty());
         let action = Action::create("Post package", "Press p to post a package", none_to_post);
-        let mut interactions = HashMap::new();
-        interactions.insert(Interaction(app_state, input), action);
+        actions.insert(input, action);
+        interactions.insert(app_state, actions);
+        // interactions.insert(Interaction(app_state, input), action);
         AppInteractions { interactions }
     }
 
-    pub fn get(&self, interaction: &Interaction) -> Option<Action> {
-        if let Some(action) = self.interactions.get(interaction) {
-            return Some(action.clone());
+    pub fn get(&self, app_state: AppState, input: InputType) -> Option<Action> {
+        if let Some(actions) = self.interactions.get(&app_state) {
+            if let Some(action) = actions.get(&input) {
+                return Some(action.clone());
+            }
         }
         None
     }
@@ -89,11 +94,8 @@ mod tests {
         let mut app = App::create(postem::ConnectionType::Local).await.unwrap();
         assert_eq!(app.app_state(), AppState::None);
         let interactions = AppInteractions::new();
-        let none_state = AppState::None;
         let input = InputType::create_key_press(KeyCode::Char('p'), KeyModifiers::empty());
-        let action = interactions
-            .get(&Interaction(AppState::None, input))
-            .unwrap();
+        let action = interactions.get(AppState::None, input).unwrap();
         (action.function)(&mut app);
         assert_eq!(
             app.app_state(),
