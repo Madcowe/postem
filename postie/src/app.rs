@@ -26,6 +26,7 @@ use crate::theme::Theme;
 pub enum AppState {
     About,
     None,
+    Quit,
     CreateAddressee(CreateAddresseeState),
     PostPackage(PostPackageState),
     ViewDoormat,
