@@ -93,6 +93,7 @@ pub struct App {
     door_mat: Option<DoorMat>,
     // recipients: Vec<PostemName>,
     // payload: Option<Bytes>,
+    char_input_buffer: Option<char>,
     post_recipients_input: String,
     post_message_input: String,
     post_key_input: String,
@@ -118,12 +119,80 @@ impl App {
             door_mat: None,
             // recipients: vec![],
             // payload: None,
+            char_input_buffer: None,
             post_recipients_input: String::new(),
             post_message_input: String::new(),
             post_key_input: String::new(),
             create_name_input: String::new(),
             create_key_input: String::new(),
         })
+    }
+
+    pub fn set_chat_input_buffer(&mut self, value: char) {
+        self.char_input_buffer = Some(value);
+    }
+
+    pub fn text_input(&mut self) {
+        if let Some(char) = self.char_input_buffer {
+            match self.app_state {
+                AppState::PostPackage(PostPackageState::InputRecipients) => {
+                    self.post_recipients_input.push(char)
+                }
+                AppState::PostPackage(PostPackageState::InputMessage) => {
+                    self.post_message_input.push(char)
+                }
+                AppState::PostPackage(PostPackageState::InputFundingWallet) => {
+                    self.post_key_input.push(char)
+                }
+                AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName) => {
+                    self.create_name_input.push(char)
+                }
+                AppState::CreateAddressee(CreateAddresseeState::InputFundingWalled) => {
+                    self.create_key_input.push(char)
+                }
+                _ => (),
+            }
+        }
+    }
+
+    pub fn text_delete(&mut self) {
+        match self.app_state {
+            AppState::PostPackage(PostPackageState::InputRecipients) => {
+                self.post_recipients_input.pop()
+            }
+            AppState::PostPackage(PostPackageState::InputMessage) => self.post_message_input.pop(),
+            AppState::PostPackage(PostPackageState::InputFundingWallet) => {
+                self.post_key_input.pop()
+            }
+            AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName) => {
+                self.create_name_input.pop()
+            }
+            AppState::CreateAddressee(CreateAddresseeState::InputFundingWalled) => {
+                self.create_key_input.pop()
+            }
+            _ => None,
+        };
+    }
+
+    pub fn text_clear(&mut self) {
+        match self.app_state {
+            AppState::PostPackage(PostPackageState::InputRecipients) => {
+                self.post_recipients_input = String::new()
+            }
+            AppState::PostPackage(PostPackageState::InputMessage) => {
+                self.post_message_input = String::new()
+            }
+            AppState::PostPackage(PostPackageState::InputFundingWallet) => {
+                self.post_key_input = String::new()
+            }
+            AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName) => {
+                self.create_name_input = String::new()
+            }
+            AppState::CreateAddressee(CreateAddresseeState::InputFundingWalled) => {
+                self.create_key_input = String::new()
+            }
+            _ => (),
+        }
     }
 
     /// If available returns estimated cost.

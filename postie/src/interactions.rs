@@ -15,13 +15,14 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use std::collections::HashMap;
+use std::{any::Any, collections::HashMap};
 
 use crate::app::{App, AppState, CreateAddresseeState, PostPackageState};
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum InputType {
     KeyPress(KeyEvent),
+    TextInput, // a genetic state so we don't have to write every possible charcter on the keyboard
 }
 impl InputType {
     fn create_key_press(key: KeyCode, key_modifers: KeyModifiers) -> InputType {
@@ -30,6 +31,21 @@ impl InputType {
             key_modifers,
             KeyEventKind::Press,
         ))
+    }
+
+    fn derive(app: &mut App, app_state: AppState, key_event: KeyEvent) -> InputType {
+        match app_state {
+            AppState::CreateAddressee(_) | AppState::PostPackage(_) => {
+                if key_event.modifiers.is_empty() || key_event.modifiers == KeyModifiers::SHIFT {
+                    if let KeyCode::Char(char) = key_event.code {
+                        app.set_chat_input_buffer(char);
+                        return InputType::TextInput;
+                    };
+                }
+            }
+            _ => (),
+        }
+        InputType::KeyPress(key_event)
     }
 }
 
@@ -50,8 +66,9 @@ impl Action {
 }
 
 // ------------------------------------------------------------------------------------------------
-// functions that can be added to actions
+// functions that can be added to actions must have signiture (&mut App)
 // ------------------------------------------------------------------------------------------------
+
 fn about(app: &mut App) {
     app.change_state(AppState::About);
 }
@@ -70,9 +87,12 @@ fn create_addressee(app: &mut App) {
     ));
 }
 
+fn text_input(app: &mut App) {
+    app.text_input();
+}
+
 // ------------------------------------------------------------------------------------------------
 
-// move back to using 2d hashmap as then can return all Inputs of each state
 pub struct AppInteractions {
     pub interactions: HashMap<AppState, HashMap<InputType, Action>>,
 }
@@ -80,8 +100,8 @@ impl AppInteractions {
     pub fn new() -> AppInteractions {
         let mut interactions = HashMap::new();
         // From AppState::None
-        let mut actions = HashMap::new();
         let app_state = AppState::None;
+        let mut actions = create_standard_actions();
         let input = InputType::create_key_press(KeyCode::Char('p'), KeyModifiers::empty());
         let action = Action::create(
             Some("P Post package"),
@@ -89,7 +109,23 @@ impl AppInteractions {
             post_package,
         );
         actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::empty());
+        let action = Action::create(
+            Some("C Create address"),
+            Some("Press c to create an address"),
+            create_addressee,
+        );
+        actions.insert(input, action);
         interactions.insert(app_state, actions);
+
+        // From AppState::PostPackage(PostPackageState::InputRecipients)
+        let app_state = AppState::PostPackage(PostPackageState::InputRecipients);
+        let mut actions = HashMap::new();
+        let input = InputType::TextInput;
+        let action = Action::create(None, None, text_input);
+        actions.insert(input, action);
+        interactions.insert(app_state, actions);
+
         AppInteractions { interactions }
     }
 
@@ -105,9 +141,9 @@ impl AppInteractions {
 
     pub fn get_actions(&self, app_state: AppState) -> Vec<&Action> {
         if let Some(actions) = self.interactions.get(&app_state) {
-            return Some(actions.values().collect());
+            return actions.values().collect();
         }
-        None
+        Vec::new()
     }
 
     pub fn get_menu_items(&self, app_state: AppState) -> Vec<String> {
@@ -130,6 +166,30 @@ impl AppInteractions {
         help_items
     }
 }
+
+fn create_standard_actions() -> HashMap<InputType, Action> {
+    let mut actions = HashMap::new();
+    let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
+    let action = Action::create(None, None, quit);
+    actions.insert(input, action);
+    let input = InputType::create_key_press(KeyCode::Char('q'), KeyModifiers::empty());
+    let action = Action::create(Some("Q Quit"), None, quit);
+    actions.insert(input, action);
+    let input = InputType::create_key_press(KeyCode::Char('a'), KeyModifiers::empty());
+    let action = Action::create(Some("A About"), None, post_package);
+    actions.insert(input, action);
+    actions
+}
+
+// fn create_input_function()
+
+// fn create_text_input_actions(app_state: AppState) -> HashMap<InputType, Action> {
+//     let mut actions = HashMap::new();
+//     match app_state {
+//         AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName) =>
+//     }
+
+// }
 
 #[cfg(test)]
 
