@@ -109,6 +109,36 @@ impl App {
         self.app_state
     }
 
+    pub fn post_recipients_input(&self) -> &str {
+        &self.post_recipients_input
+    }
+
+    pub fn post_message_input(&self) -> &str {
+        &self.post_message_input
+    }
+
+    pub fn post_key_input(&self) -> &str {
+        &self.post_key_input
+    }
+
+    pub fn create_name_input(&self) -> &str {
+        &self.create_name_input
+    }
+
+    pub fn create_key_input(&self) -> &str {
+        &self.create_key_input
+    }
+
+    pub fn toggle_sub_state(&mut self, forward: bool) {
+        match self.app_state {
+            AppState::PostPackage(mut post_package_state) => post_package_state.toggle(forward),
+            AppState::CreateAddressee(mut create_addressee_state) => {
+                create_addressee_state.toggle()
+            }
+            _ => (),
+        }
+    }
+
     pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
         let client = PostemClient::init(connection_type).await?;
         Ok(App {

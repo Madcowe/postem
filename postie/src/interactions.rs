@@ -15,7 +15,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use std::{any::Any, collections::HashMap};
+use std::collections::HashMap;
 
 use crate::app::{App, AppState, CreateAddresseeState, PostPackageState};
 
@@ -91,6 +91,22 @@ fn text_input(app: &mut App) {
     app.text_input();
 }
 
+fn text_delete(app: &mut App) {
+    app.text_delete();
+}
+
+fn text_clear(app: &mut App) {
+    app.text_clear();
+}
+
+fn toggle_sub_state(app: &mut App) {
+    app.toggle_sub_state(true);
+}
+
+fn toggle_sub_state_backwards(app: &mut App) {
+    app.toggle_sub_state(false);
+}
+
 // ------------------------------------------------------------------------------------------------
 
 pub struct AppInteractions {
@@ -120,10 +136,7 @@ impl AppInteractions {
 
         // From AppState::PostPackage(PostPackageState::InputRecipients)
         let app_state = AppState::PostPackage(PostPackageState::InputRecipients);
-        let mut actions = HashMap::new();
-        let input = InputType::TextInput;
-        let action = Action::create(None, None, text_input);
-        actions.insert(input, action);
+        let mut actions = create_text_input_actions();
         interactions.insert(app_state, actions);
 
         AppInteractions { interactions }
@@ -181,6 +194,32 @@ fn create_standard_actions() -> HashMap<InputType, Action> {
     actions
 }
 
+fn create_text_input_actions() -> HashMap<InputType, Action> {
+    let mut actions = HashMap::new();
+    let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
+    let action = Action::create(None, None, quit);
+    actions.insert(input, action);
+    let input = InputType::TextInput;
+    let action = Action::create(None, None, text_input);
+    actions.insert(input, action);
+    let input = InputType::create_key_press(KeyCode::Backspace, KeyModifiers::empty());
+    let action = Action::create(None, None, text_delete);
+    actions.insert(input, action);
+    let input = InputType::create_key_press(KeyCode::Char('u'), KeyModifiers::CONTROL);
+    let action = Action::create(None, None, text_clear);
+    actions.insert(input, action);
+    let action = Action::create(None, None, toggle_sub_state);
+    let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+    actions.insert(input, action.clone());
+    let input = InputType::create_key_press(KeyCode::Tab, KeyModifiers::empty());
+    actions.insert(input, action);
+    let action = Action::create(None, None, toggle_sub_state_backwards);
+    // Does shift need to be spefified with BackTab??? needs testing in app
+    let input = InputType::create_key_press(KeyCode::BackTab, KeyModifiers::empty());
+    actions.insert(input, action);
+    actions
+}
+
 // fn create_input_function()
 
 // fn create_text_input_actions(app_state: AppState) -> HashMap<InputType, Action> {
@@ -210,5 +249,61 @@ mod tests {
             app.app_state(),
             AppState::PostPackage(PostPackageState::InputRecipients)
         );
+        eprintln!(
+            "{:?}",
+            interactions.get_actions(AppState::PostPackage(PostPackageState::InputRecipients))
+        );
+        let input = InputType::derive(
+            &mut app,
+            AppState::PostPackage(PostPackageState::InputRecipients),
+            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()),
+        );
+        let action = interactions
+            .get(
+                AppState::PostPackage(PostPackageState::InputRecipients),
+                input,
+            )
+            .unwrap();
+        (action.function)(&mut app);
+        assert_eq!(app.post_recipients_input(), "a");
+        let input = InputType::derive(
+            &mut app,
+            AppState::PostPackage(PostPackageState::InputRecipients),
+            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::empty()),
+        );
+        let action = interactions
+            .get(
+                AppState::PostPackage(PostPackageState::InputRecipients),
+                input,
+            )
+            .unwrap();
+        (action.function)(&mut app);
+        assert_eq!(app.post_recipients_input(), "am");
+        let input = InputType::derive(
+            &mut app,
+            AppState::PostPackage(PostPackageState::InputRecipients),
+            KeyEvent::new(KeyCode::Backspace, KeyModifiers::empty()),
+        );
+        let action = interactions
+            .get(
+                AppState::PostPackage(PostPackageState::InputRecipients),
+                input,
+            )
+            .unwrap();
+        (action.function)(&mut app);
+        assert_eq!(app.post_recipients_input(), "a");
+        let input = InputType::derive(
+            &mut app,
+            AppState::PostPackage(PostPackageState::InputRecipients),
+            KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+        );
+        let action = interactions
+            .get(
+                AppState::PostPackage(PostPackageState::InputRecipients),
+                input,
+            )
+            .unwrap();
+        (action.function)(&mut app);
+        assert_eq!(app.post_recipients_input(), "");
     }
 }
