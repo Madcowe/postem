@@ -137,6 +137,20 @@ impl AppInteractions {
         // From AppState::PostPackage(PostPackageState::InputRecipients)
         let app_state = AppState::PostPackage(PostPackageState::InputRecipients);
         let mut actions = create_text_input_actions();
+        let action = Action::create(None, None, toggle_sub_state);
+        let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+        actions.insert(input, action.clone());
+        interactions.insert(app_state, actions);
+        // From AppState::PostPackage(PostPackageState::InputMessage)
+        let app_state = AppState::PostPackage(PostPackageState::InputMessage);
+        let mut actions = create_text_input_actions();
+        let action = Action::create(None, None, toggle_sub_state);
+        let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+        actions.insert(input, action.clone());
+        interactions.insert(app_state, actions);
+        // From AppState::PostPackage(PostPackageState::InputFundingWallet)
+        let app_state = AppState::PostPackage(PostPackageState::InputFundingWallet);
+        let mut actions = create_text_input_actions();
         interactions.insert(app_state, actions);
 
         AppInteractions { interactions }
@@ -208,9 +222,6 @@ fn create_text_input_actions() -> HashMap<InputType, Action> {
     let input = InputType::create_key_press(KeyCode::Char('u'), KeyModifiers::CONTROL);
     let action = Action::create(None, None, text_clear);
     actions.insert(input, action);
-    let action = Action::create(None, None, toggle_sub_state);
-    let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
-    actions.insert(input, action.clone());
     let input = InputType::create_key_press(KeyCode::Tab, KeyModifiers::empty());
     actions.insert(input, action);
     let action = Action::create(None, None, toggle_sub_state_backwards);
@@ -219,16 +230,6 @@ fn create_text_input_actions() -> HashMap<InputType, Action> {
     actions.insert(input, action);
     actions
 }
-
-// fn create_input_function()
-
-// fn create_text_input_actions(app_state: AppState) -> HashMap<InputType, Action> {
-//     let mut actions = HashMap::new();
-//     match app_state {
-//         AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName) =>
-//     }
-
-// }
 
 #[cfg(test)]
 
@@ -305,5 +306,31 @@ mod tests {
             .unwrap();
         (action.function)(&mut app);
         assert_eq!(app.post_recipients_input(), "");
+        let input = InputType::derive(
+            &mut app,
+            AppState::PostPackage(PostPackageState::InputRecipients),
+            KeyEvent::new(KeyCode::Tab, KeyModifiers::empty()),
+        );
+        let action = interactions
+            .get(
+                AppState::PostPackage(PostPackageState::InputRecipients),
+                input,
+            )
+            .unwrap();
+        (action.function)(&mut app);
+        assert_eq!(
+            app.app_state(),
+            AppState::PostPackage(PostPackageState::InputMessage)
+        );
+        let input = InputType::derive(
+            &mut app,
+            AppState::PostPackage(PostPackageState::InputMessage),
+            KeyEvent::new(KeyCode::Char('A'), KeyModifiers::empty()),
+        );
+        let action = interactions
+            .get(AppState::PostPackage(PostPackageState::InputMessage), input)
+            .unwrap();
+        (action.function)(&mut app);
+        assert_eq!(app.post_message_input(), "A");
     }
 }

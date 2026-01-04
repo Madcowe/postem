@@ -39,14 +39,10 @@ pub enum CreateAddresseeState {
     InputFundingWalled,
 }
 impl CreateAddresseeState {
-    pub fn toggle(&mut self) {
+    pub fn toggle(&self) -> CreateAddresseeState {
         match self {
-            CreateAddresseeState::InputAddresseeName => {
-                *self = CreateAddresseeState::InputFundingWalled
-            }
-            CreateAddresseeState::InputFundingWalled => {
-                *self = CreateAddresseeState::InputAddresseeName
-            }
+            CreateAddresseeState::InputAddresseeName => CreateAddresseeState::InputFundingWalled,
+            CreateAddresseeState::InputFundingWalled => CreateAddresseeState::InputAddresseeName,
         }
     }
 }
@@ -58,24 +54,24 @@ pub enum PostPackageState {
     InputFundingWallet,
 }
 impl PostPackageState {
-    pub fn toggle(&mut self, fowards: bool) {
+    pub fn toggle(&self, fowards: bool) -> PostPackageState {
         match self {
             PostPackageState::InputRecipients => {
-                *self = if fowards {
+                if fowards {
                     PostPackageState::InputMessage
                 } else {
                     PostPackageState::InputFundingWallet
                 }
             }
             PostPackageState::InputMessage => {
-                *self = if fowards {
+                if fowards {
                     PostPackageState::InputFundingWallet
                 } else {
                     PostPackageState::InputRecipients
                 }
             }
             PostPackageState::InputFundingWallet => {
-                *self = if fowards {
+                if fowards {
                     PostPackageState::InputRecipients
                 } else {
                     PostPackageState::InputMessage
@@ -131,9 +127,13 @@ impl App {
 
     pub fn toggle_sub_state(&mut self, forward: bool) {
         match self.app_state {
-            AppState::PostPackage(mut post_package_state) => post_package_state.toggle(forward),
-            AppState::CreateAddressee(mut create_addressee_state) => {
-                create_addressee_state.toggle()
+            AppState::PostPackage(post_package_state) => {
+                eprintln!("app: {:?} local: {:?}", self.app_state, post_package_state);
+                self.change_state(AppState::PostPackage(post_package_state.toggle(forward)));
+                eprintln!("app: {:?} local: {:?}", self.app_state, post_package_state);
+            }
+            AppState::CreateAddressee(create_addressee_state) => {
+                self.change_state(AppState::CreateAddressee(create_addressee_state.toggle()));
             }
             _ => (),
         }
@@ -465,5 +465,55 @@ mod tests {
             eprintln!("{:?}", package.payload());
             assert_eq!(package.payload().unwrap(), message);
         }
+    }
+
+    #[test]
+    pub fn create_addressee_toggle() {
+        let mut create_addressee_state = CreateAddresseeState::InputAddresseeName;
+        create_addressee_state = create_addressee_state.toggle();
+        assert_eq!(
+            create_addressee_state,
+            CreateAddresseeState::InputFundingWalled
+        );
+        create_addressee_state = create_addressee_state.toggle();
+        assert_eq!(
+            create_addressee_state,
+            CreateAddresseeState::InputAddresseeName
+        );
+    }
+
+    #[test]
+    pub fn post_package_toggle() {
+        let mut post_package_state = PostPackageState::InputRecipients;
+        post_package_state = post_package_state.toggle(true);
+        assert_eq!(post_package_state, PostPackageState::InputMessage);
+        post_package_state = post_package_state.toggle(true);
+        assert_eq!(post_package_state, PostPackageState::InputFundingWallet);
+        post_package_state = post_package_state.toggle(true);
+        assert_eq!(post_package_state, PostPackageState::InputRecipients);
+        post_package_state = post_package_state.toggle(false);
+        assert_eq!(post_package_state, PostPackageState::InputFundingWallet);
+        post_package_state = post_package_state.toggle(false);
+        assert_eq!(post_package_state, PostPackageState::InputMessage);
+    }
+
+    #[tokio::test]
+    pub async fn toggle_sub_state() {
+        let mut app = App::create(ConnectionType::Local).await.unwrap();
+        app.change_state(AppState::PostPackage(PostPackageState::InputRecipients));
+        assert_eq!(
+            app.app_state,
+            AppState::PostPackage(PostPackageState::InputRecipients),
+        );
+        app.toggle_sub_state(true);
+        assert_eq!(
+            app.app_state,
+            AppState::PostPackage(PostPackageState::InputMessage),
+        );
+        app.toggle_sub_state(false);
+        assert_eq!(
+            app.app_state,
+            AppState::PostPackage(PostPackageState::InputRecipients),
+        );
     }
 }
