@@ -1,3 +1,4 @@
+use postem::PostemError;
 /*
 Copyright (C) 2025 Postem
 
@@ -53,10 +54,14 @@ impl InputType {
 pub struct Action {
     menu_text: Option<String>,
     help_text: Option<String>,
-    function: fn(&mut App),
+    function: fn(&mut App) -> Result<(), PostemError>,
 }
 impl Action {
-    fn create(menu_text: Option<&str>, help_text: Option<&str>, function: fn(&mut App)) -> Self {
+    fn create(
+        menu_text: Option<&str>,
+        help_text: Option<&str>,
+        function: fn(&mut App) -> Result<(), PostemError>,
+    ) -> Self {
         Self {
             menu_text: menu_text.map(|s| s.to_string()),
             help_text: help_text.map(|s| s.to_string()),
@@ -66,45 +71,54 @@ impl Action {
 }
 
 // ------------------------------------------------------------------------------------------------
-// functions that can be added to actions must have signiture (&mut App)
+// functions that can be added to actions must have signiture (&mut App) -> Result<(), PostemError>
 // ------------------------------------------------------------------------------------------------
 
-fn about(app: &mut App) {
+fn about(app: &mut App) -> Result<(), PostemError> {
     app.change_state(AppState::About);
+    Ok(())
 }
 
-fn quit(app: &mut App) {
+fn quit(app: &mut App) -> Result<(), PostemError> {
     app.change_state(AppState::Quit);
+    Ok(())
 }
 
-fn post_package(app: &mut App) {
+fn post_package(app: &mut App) -> Result<(), PostemError> {
     app.change_state(AppState::PostPackage(PostPackageState::InputRecipients));
+    Ok(())
 }
 
-fn create_addressee(app: &mut App) {
+fn create_addressee(app: &mut App) -> Result<(), PostemError> {
     app.change_state(AppState::CreateAddressee(
         CreateAddresseeState::InputAddresseeName,
     ));
+    Ok(())
 }
 
-fn text_input(app: &mut App) {
+fn text_input(app: &mut App) -> Result<(), PostemError> {
     app.text_input();
+    Ok(())
 }
 
-fn text_delete(app: &mut App) {
+fn text_delete(app: &mut App) -> Result<(), PostemError> {
     app.text_delete();
+    Ok(())
 }
 
-fn text_clear(app: &mut App) {
+fn text_clear(app: &mut App) -> Result<(), PostemError> {
     app.text_clear();
+    Ok(())
 }
 
-fn toggle_sub_state(app: &mut App) {
+fn toggle_sub_state(app: &mut App) -> Result<(), PostemError> {
     app.toggle_sub_state(true);
+    Ok(())
 }
 
-fn toggle_sub_state_backwards(app: &mut App) {
+fn toggle_sub_state_backwards(app: &mut App) -> Result<(), PostemError> {
     app.toggle_sub_state(false);
+    Ok(())
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -151,6 +165,9 @@ impl AppInteractions {
         // From AppState::PostPackage(PostPackageState::InputFundingWallet)
         let app_state = AppState::PostPackage(PostPackageState::InputFundingWallet);
         let mut actions = create_text_input_actions();
+        // let action = Action::create(None, None, ?);
+        // let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+        // actions.insert(input, action.clone());
         interactions.insert(app_state, actions);
 
         AppInteractions { interactions }
@@ -223,6 +240,7 @@ fn create_text_input_actions() -> HashMap<InputType, Action> {
     let action = Action::create(None, None, text_clear);
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Tab, KeyModifiers::empty());
+    let action = Action::create(None, None, toggle_sub_state);
     actions.insert(input, action);
     let action = Action::create(None, None, toggle_sub_state_backwards);
     // Does shift need to be spefified with BackTab??? needs testing in app
@@ -245,7 +263,7 @@ mod tests {
         eprintln!("{:?}", interactions.get_actions(AppState::None));
         let input = InputType::create_key_press(KeyCode::Char('p'), KeyModifiers::empty());
         let action = interactions.get(AppState::None, input).unwrap();
-        (action.function)(&mut app);
+        (action.function)(&mut app).unwrap();
         assert_eq!(
             app.app_state(),
             AppState::PostPackage(PostPackageState::InputRecipients)
@@ -265,7 +283,7 @@ mod tests {
                 input,
             )
             .unwrap();
-        (action.function)(&mut app);
+        (action.function)(&mut app).unwrap();
         assert_eq!(app.post_recipients_input(), "a");
         let input = InputType::derive(
             &mut app,
@@ -278,7 +296,7 @@ mod tests {
                 input,
             )
             .unwrap();
-        (action.function)(&mut app);
+        (action.function)(&mut app).unwrap();
         assert_eq!(app.post_recipients_input(), "am");
         let input = InputType::derive(
             &mut app,
@@ -291,7 +309,7 @@ mod tests {
                 input,
             )
             .unwrap();
-        (action.function)(&mut app);
+        (action.function)(&mut app).unwrap();
         assert_eq!(app.post_recipients_input(), "a");
         let input = InputType::derive(
             &mut app,
@@ -304,7 +322,7 @@ mod tests {
                 input,
             )
             .unwrap();
-        (action.function)(&mut app);
+        (action.function)(&mut app).unwrap();
         assert_eq!(app.post_recipients_input(), "");
         let input = InputType::derive(
             &mut app,
@@ -317,7 +335,7 @@ mod tests {
                 input,
             )
             .unwrap();
-        (action.function)(&mut app);
+        (action.function)(&mut app).unwrap();
         assert_eq!(
             app.app_state(),
             AppState::PostPackage(PostPackageState::InputMessage)
@@ -330,7 +348,7 @@ mod tests {
         let action = interactions
             .get(AppState::PostPackage(PostPackageState::InputMessage), input)
             .unwrap();
-        (action.function)(&mut app);
+        (action.function)(&mut app).unwrap();
         assert_eq!(app.post_message_input(), "A");
     }
 }
