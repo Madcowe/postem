@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2025 Postem
+Copyright (C) 2025-2026 Postem
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -95,6 +95,7 @@ pub struct App {
     post_key_input: String,
     create_name_input: String,
     create_key_input: String,
+    cost_estimate: AttoTokens,
 }
 impl App {
     pub fn change_state(&mut self, app_state: AppState) {
@@ -105,12 +106,16 @@ impl App {
         self.app_state
     }
 
+    pub fn theme(&self) -> Theme {
+        self.theme.clone()
+    }
+
     pub fn post_recipients_input(&self) -> &str {
         &self.post_recipients_input
     }
 
-    pub fn post_message_input(&self) -> &str {
-        &self.post_message_input
+    pub fn post_message_input(&self) -> String {
+        self.post_message_input.to_string()
     }
 
     pub fn post_key_input(&self) -> &str {
@@ -123,6 +128,10 @@ impl App {
 
     pub fn create_key_input(&self) -> &str {
         &self.create_key_input
+    }
+
+    pub fn set_cost_estimate(&mut self, value: AttoTokens) {
+        self.cost_estimate = value;
     }
 
     pub fn toggle_sub_state(&mut self, forward: bool) {
@@ -155,6 +164,7 @@ impl App {
             post_key_input: String::new(),
             create_name_input: String::new(),
             create_key_input: String::new(),
+            cost_estimate: AttoTokens::zero(),
         })
     }
 
@@ -276,6 +286,13 @@ impl App {
         } else {
             return Ok(false); // returns false if called when there is no doormat
         }
+    }
+
+    pub fn split_recipients(&self) -> Vec<String> {
+        self.post_recipients_input
+            .split(',')
+            .map(|s| s.to_string())
+            .collect()
     }
 
     /// Returns a vector of all existing recipients, but only in terms of the key being used

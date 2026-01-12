@@ -1,6 +1,5 @@
-use postem::PostemError;
 /*
-Copyright (C) 2025 Postem
+Copyright (C) 2025-2026 Postem
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -15,6 +14,8 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+use autonomi::Bytes;
+use postem::PostemError;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::collections::HashMap;
 
@@ -51,27 +52,49 @@ impl InputType {
 }
 
 #[derive(Clone, Debug)]
+pub enum ToExecute {
+    SyncFunction(fn(&mut App) -> Result<(), PostemError>),
+    EstimatePackageCost,
+}
+
+#[derive(Clone, Debug)]
 pub struct Action {
     menu_text: Option<String>,
     help_text: Option<String>,
-    function: fn(&mut App) -> Result<(), PostemError>,
+    // function: fn(&mut App) -> Result<(), PostemError>,
+    to_execute: ToExecute,
 }
 impl Action {
-    fn create(
+    pub fn create(
         menu_text: Option<&str>,
         help_text: Option<&str>,
-        function: fn(&mut App) -> Result<(), PostemError>,
+        // function: fn(&mut App) -> Result<(), PostemError>,
+        to_execute: ToExecute,
     ) -> Self {
         Self {
             menu_text: menu_text.map(|s| s.to_string()),
             help_text: help_text.map(|s| s.to_string()),
-            function,
+            to_execute,
         }
+    }
+
+    // executes if sync function or return async function to be passed to wait pop up
+    pub fn execute_or_async(
+        &self,
+        app: &mut App,
+    ) -> Result<Option<impl Future<Output = Result<(), PostemError>>>, PostemError> {
+        match self.to_execute {
+            ToExecute::SyncFunction(sync_function) => sync_function(app)?,
+            ToExecute::EstimatePackageCost => {
+                return Ok(Some(estimate_package_cost(app)));
+            }
+        }
+        Ok(None)
     }
 }
 
 // ------------------------------------------------------------------------------------------------
-// functions that can be added to actions must have signiture (&mut App) -> Result<(), PostemError>
+// synx functions that can be added to actions need signiture (&mut App) -> Result<(), PostemError>
 // ------------------------------------------------------------------------------------------------
 
 fn about(app: &mut App) -> Result<(), PostemError> {
@@ -120,6 +143,18 @@ fn toggle_sub_state_backwards(app: &mut App) -> Result<(), PostemError> {
     app.toggle_sub_state(false);
     Ok(())
 }
+// ------------------------------------------------------------------------------------------------
+
+// ------------------------------------------------------------------------------------------------
+// async functions are returned by execute_or_async so that the main loop can send to wait pop up
+// ------------------------------------------------------------------------------------------------
+
+async fn estimate_package_cost(app: &mut App) -> Result<(), PostemError> {
+    let payload = Bytes::from(app.post_message_input());
+    let no_of_recipients = app.split_recipients().len();
+    app.set_cost_estimate(app.estimate_postage(payload, no_of_recipients).await?);
+    Ok(())
+}
 
 // ------------------------------------------------------------------------------------------------
 
@@ -136,14 +171,14 @@ impl AppInteractions {
         let action = Action::create(
             Some("P Post package"),
             Some("Press p to post a package"),
-            post_package,
+            ToExecute::SyncFunction(post_package),
         );
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::empty());
         let action = Action::create(
             Some("C Create address"),
             Some("Press c to create an address"),
-            create_addressee,
+            ToExecute::SyncFunction(create_addressee),
         );
         actions.insert(input, action);
         interactions.insert(app_state, actions);
@@ -151,23 +186,23 @@ impl AppInteractions {
         // From AppState::PostPackage(PostPackageState::InputRecipients)
         let app_state = AppState::PostPackage(PostPackageState::InputRecipients);
         let mut actions = create_text_input_actions();
-        let action = Action::create(None, None, toggle_sub_state);
+        let action = Action::create(None, None, ToExecute::SyncFunction(toggle_sub_state));
         let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
         actions.insert(input, action.clone());
         interactions.insert(app_state, actions);
         // From AppState::PostPackage(PostPackageState::InputMessage)
         let app_state = AppState::PostPackage(PostPackageState::InputMessage);
         let mut actions = create_text_input_actions();
-        let action = Action::create(None, None, toggle_sub_state);
+        let action = Action::create(None, None, ToExecute::SyncFunction(toggle_sub_state));
         let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
         actions.insert(input, action.clone());
         interactions.insert(app_state, actions);
         // From AppState::PostPackage(PostPackageState::InputFundingWallet)
         let app_state = AppState::PostPackage(PostPackageState::InputFundingWallet);
         let mut actions = create_text_input_actions();
-        // let action = Action::create(None, None, ?);
-        // let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
-        // actions.insert(input, action.clone());
+        let action = Action::create(None, None, ToExecute::EstimatePackageCost);
+        let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+        actions.insert(input, action);
         interactions.insert(app_state, actions);
 
         AppInteractions { interactions }
@@ -214,13 +249,13 @@ impl AppInteractions {
 fn create_standard_actions() -> HashMap<InputType, Action> {
     let mut actions = HashMap::new();
     let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
-    let action = Action::create(None, None, quit);
+    let action = Action::create(None, None, ToExecute::SyncFunction(quit));
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Char('q'), KeyModifiers::empty());
-    let action = Action::create(Some("Q Quit"), None, quit);
+    let action = Action::create(Some("Q Quit"), None, ToExecute::SyncFunction(quit));
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Char('a'), KeyModifiers::empty());
-    let action = Action::create(Some("A About"), None, post_package);
+    let action = Action::create(Some("A About"), None, ToExecute::SyncFunction(post_package));
     actions.insert(input, action);
     actions
 }
@@ -228,21 +263,25 @@ fn create_standard_actions() -> HashMap<InputType, Action> {
 fn create_text_input_actions() -> HashMap<InputType, Action> {
     let mut actions = HashMap::new();
     let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
-    let action = Action::create(None, None, quit);
+    let action = Action::create(None, None, ToExecute::SyncFunction(quit));
     actions.insert(input, action);
     let input = InputType::TextInput;
-    let action = Action::create(None, None, text_input);
+    let action = Action::create(None, None, ToExecute::SyncFunction(text_input));
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Backspace, KeyModifiers::empty());
-    let action = Action::create(None, None, text_delete);
+    let action = Action::create(None, None, ToExecute::SyncFunction(text_delete));
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Char('u'), KeyModifiers::CONTROL);
-    let action = Action::create(None, None, text_clear);
+    let action = Action::create(None, None, ToExecute::SyncFunction(text_clear));
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Tab, KeyModifiers::empty());
-    let action = Action::create(None, None, toggle_sub_state);
+    let action = Action::create(None, None, ToExecute::SyncFunction(toggle_sub_state));
     actions.insert(input, action);
-    let action = Action::create(None, None, toggle_sub_state_backwards);
+    let action = Action::create(
+        None,
+        None,
+        ToExecute::SyncFunction(toggle_sub_state_backwards),
+    );
     // Does shift need to be spefified with BackTab??? needs testing in app
     let input = InputType::create_key_press(KeyCode::BackTab, KeyModifiers::empty());
     actions.insert(input, action);
@@ -263,7 +302,7 @@ mod tests {
         eprintln!("{:?}", interactions.get_actions(AppState::None));
         let input = InputType::create_key_press(KeyCode::Char('p'), KeyModifiers::empty());
         let action = interactions.get(AppState::None, input).unwrap();
-        (action.function)(&mut app).unwrap();
+        action.execute_or_async(&mut app).unwrap();
         assert_eq!(
             app.app_state(),
             AppState::PostPackage(PostPackageState::InputRecipients)
@@ -283,7 +322,7 @@ mod tests {
                 input,
             )
             .unwrap();
-        (action.function)(&mut app).unwrap();
+        action.execute_or_async(&mut app).unwrap();
         assert_eq!(app.post_recipients_input(), "a");
         let input = InputType::derive(
             &mut app,
@@ -296,7 +335,7 @@ mod tests {
                 input,
             )
             .unwrap();
-        (action.function)(&mut app).unwrap();
+        action.execute_or_async(&mut app).unwrap();
         assert_eq!(app.post_recipients_input(), "am");
         let input = InputType::derive(
             &mut app,
@@ -309,7 +348,7 @@ mod tests {
                 input,
             )
             .unwrap();
-        (action.function)(&mut app).unwrap();
+        action.execute_or_async(&mut app).unwrap();
         assert_eq!(app.post_recipients_input(), "a");
         let input = InputType::derive(
             &mut app,
@@ -322,7 +361,7 @@ mod tests {
                 input,
             )
             .unwrap();
-        (action.function)(&mut app).unwrap();
+        action.execute_or_async(&mut app).unwrap();
         assert_eq!(app.post_recipients_input(), "");
         let input = InputType::derive(
             &mut app,
@@ -335,7 +374,7 @@ mod tests {
                 input,
             )
             .unwrap();
-        (action.function)(&mut app).unwrap();
+        action.execute_or_async(&mut app).unwrap();
         assert_eq!(
             app.app_state(),
             AppState::PostPackage(PostPackageState::InputMessage)
@@ -348,7 +387,21 @@ mod tests {
         let action = interactions
             .get(AppState::PostPackage(PostPackageState::InputMessage), input)
             .unwrap();
-        (action.function)(&mut app).unwrap();
+        action.execute_or_async(&mut app).unwrap();
         assert_eq!(app.post_message_input(), "A");
+        // test pressing enter of InputFundingWallet
+        let input = InputType::derive(
+            &mut app,
+            AppState::PostPackage(PostPackageState::InputFundingWallet),
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::empty()),
+        );
+        let action = interactions
+            .get(
+                AppState::PostPackage(PostPackageState::InputFundingWallet),
+                input,
+            )
+            .unwrap();
+        let async_fn = action.execute_or_async(&mut app).unwrap();
+        assert!(async_fn.is_some());
     }
 }
