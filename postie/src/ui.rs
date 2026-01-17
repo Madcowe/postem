@@ -43,25 +43,27 @@ pub async fn wait_pop_up<B: Backend>(
     let animate = async {
         let mut antimation = Antimation::new();
         while count < 1200 {
-            let result = terminal.draw(|frame| {
-                frame.buffer_mut().merge(&previous_buffer);
-                let area = frame.area();
-                let pop_up_rect = area.inner(Margin::new(area.width / 4, area.height / 4));
-                Clear.render(pop_up_rect, frame.buffer_mut());
-                let pop_up_block = Block::default()
-                    .title("Working...")
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Thick)
-                    .style(theme.header_style());
-                let ant_frame = antimation.next_frame();
-                let pop_up_text = Paragraph::new(Text::styled(
-                    format!("{message}\n {ant_frame}"),
-                    Style::default(),
-                ))
-                .wrap(Wrap { trim: false })
-                .block(pop_up_block);
-                frame.render_widget(pop_up_text, pop_up_rect);
-            });
+            let _result = terminal
+                .draw(|frame| {
+                    frame.buffer_mut().merge(&previous_buffer);
+                    let area = frame.area();
+                    let pop_up_rect = area.inner(Margin::new(area.width / 4, area.height / 4));
+                    Clear.render(pop_up_rect, frame.buffer_mut());
+                    let pop_up_block = Block::default()
+                        .title("Working...")
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Thick)
+                        .style(theme.header_style());
+                    let ant_frame = antimation.next_frame();
+                    let pop_up_text = Paragraph::new(Text::styled(
+                        format!("{message}\n {ant_frame}"),
+                        Style::default(),
+                    ))
+                    .wrap(Wrap { trim: false })
+                    .block(pop_up_block);
+                    frame.render_widget(pop_up_text, pop_up_rect);
+                })
+                .expect("Wait pop up animation frame failed to render");
             count += 1;
             sleep(Duration::from_millis(500)).await;
             // try directly calling Error pop up rather than returning Error
@@ -70,7 +72,7 @@ pub async fn wait_pop_up<B: Backend>(
             //     _ => (),
             // }
         }
-        Err(PostemError::ClientConnectionError)
+        Err(PostemError::AntnetTimeOut)
     };
     tokio::select! {
         e = animate => { e }

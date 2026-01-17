@@ -66,6 +66,10 @@ pub enum PostemError {
         "Storage location repeatdily being used before pacakge is fully posted, chunk address of seal included for resuse"
     )]
     ChasingItsTail(Chunk),
+    #[error("Antnet request never returned")]
+    AntnetTimeOut,
+    #[error("Package payload too small must be at least 3 bytes to send")]
+    PayloadTooSmall,
 }
 // this should'nt automatically convert as non addresses base function could return the graph error
 impl From<GraphError> for PostemError {

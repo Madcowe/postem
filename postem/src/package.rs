@@ -91,6 +91,9 @@ impl PostemClient {
         seal: Option<Chunk>, // so if function previously create seal but couldn't do the graph it can try again
     ) -> Result<(Package, AttoTokens), PostemError> {
         let (seal, addr, payload_cost, seal_cost) = if seal.is_none() {
+            if payload.len() < 3 {
+                return Err(PostemError::PayloadTooSmall);
+            }
             let (payload_cost, data_map) = self
                 .client
                 .data_put(payload.clone(), payment_option.clone())
@@ -146,6 +149,9 @@ impl PostemClient {
         // location_pk: &PublicKey,
         number_of_recipients: usize,
     ) -> Result<AttoTokens, PostemError> {
+        if payload.len() < 3 {
+            return Err(PostemError::PayloadTooSmall);
+        }
         let cost = self.client.data_cost(payload).await?;
         let mut posting_cost = AttoTokens::zero();
         if number_of_recipients > 0 {

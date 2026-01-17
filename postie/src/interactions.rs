@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-use autonomi::Bytes;
+use autonomi::{Bytes, PaymentMode};
 use postem::PostemError;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::collections::HashMap;
@@ -54,7 +54,7 @@ impl InputType {
 #[derive(Clone, Debug)]
 pub enum ToExecute {
     SyncFunction(fn(&mut App) -> Result<(), PostemError>),
-    EstimatePackageCost,
+    EstimatePostage,
 }
 
 #[derive(Clone, Debug)]
@@ -85,8 +85,8 @@ impl Action {
     ) -> Result<Option<impl Future<Output = Result<(), PostemError>>>, PostemError> {
         match self.to_execute {
             ToExecute::SyncFunction(sync_function) => sync_function(app)?,
-            ToExecute::EstimatePackageCost => {
-                return Ok(Some(estimate_package_cost(app)));
+            ToExecute::EstimatePostage => {
+                return Ok(Some(estimate_postage(app)));
             }
         }
         Ok(None)
@@ -149,8 +149,18 @@ fn toggle_sub_state_backwards(app: &mut App) -> Result<(), PostemError> {
 // async functions are returned by execute_or_async so that the main loop can send to wait pop up
 // ------------------------------------------------------------------------------------------------
 
-async fn estimate_package_cost(app: &mut App) -> Result<(), PostemError> {
-    let payload = Bytes::from(app.post_message_input());
+async fn estimate_postage(app: &mut App) -> Result<(), PostemError> {
+    let mut message = app.post_message_input();
+    // if message less that 3 characters add white space up to that as needs to be a lests 3 bytes
+    // to post...will be overkill for non-ascii but no need to boil the ocean.
+    if message.len() < 3 {
+        let extra_blanks = 3 - message.len();
+        for _ in 0..extra_blanks {
+            message.push(' ');
+        }
+        message.push('.');
+    }
+    let payload = Bytes::from(message);
     let no_of_recipients = app.split_recipients().len();
     app.set_cost_estimate(app.estimate_postage(payload, no_of_recipients).await?);
     Ok(())
@@ -200,7 +210,7 @@ impl AppInteractions {
         // From AppState::PostPackage(PostPackageState::InputFundingWallet)
         let app_state = AppState::PostPackage(PostPackageState::InputFundingWallet);
         let mut actions = create_text_input_actions();
-        let action = Action::create(None, None, ToExecute::EstimatePackageCost);
+        let action = Action::create(None, None, ToExecute::EstimatePostage);
         let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
         actions.insert(input, action);
         interactions.insert(app_state, actions);
@@ -292,7 +302,16 @@ fn create_text_input_actions() -> HashMap<InputType, Action> {
 
 mod tests {
 
+    use crate::ui::wait_pop_up;
+
     use super::*;
+    use ratatui::{
+        Terminal,
+        backend::{Backend, CrosstermBackend},
+        buffer::Buffer,
+        layout::Rect,
+    };
+    use std::io;
 
     #[tokio::test]
     async fn test_app_interactions() {
@@ -401,7 +420,23 @@ mod tests {
                 input,
             )
             .unwrap();
+        let theme = app.theme();
+        app.change_state(AppState::PostPackage(PostPackageState::InputMessage));
+        eprintln!("{}", app.post_message_input());
         let async_fn = action.execute_or_async(&mut app).unwrap();
         assert!(async_fn.is_some());
+        let mut stdout = io::stdout();
+        let backend = CrosstermBackend::new(stdout);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let buffer = Buffer::empty(Rect::new(0, 0, 1, 1));
+        let wait_result = wait_pop_up(
+            &mut terminal,
+            buffer,
+            async_fn.unwrap(),
+            "Testing...1...2...3",
+            theme,
+        )
+        .await;
+        assert_eq!(wait_result, Ok(()));
     }
 }

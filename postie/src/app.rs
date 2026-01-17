@@ -455,6 +455,8 @@ mod tests {
             );
         }
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        // Note there is a minumum size otherwise self encryption fails...in text at least three character
+        // let message = Bytes::from("AB");
         let message = Bytes::from("Could I interest you in these fine leather jackets?");
         let estimate = app.estimate_postage(message.clone(), 2).await.unwrap();
         // add non existing address
