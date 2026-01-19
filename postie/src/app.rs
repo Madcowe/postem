@@ -26,6 +26,7 @@ use crate::theme::Theme;
 pub enum AppState {
     About,
     None,
+    Error,
     Quit,
     CreateAddressee(CreateAddresseeState),
     PostPackage(PostPackageState),
@@ -84,11 +85,12 @@ impl PostPackageState {
 pub struct App {
     connection_type: ConnectionType,
     app_state: AppState,
+    previous_state: AppState,
+    menu_visible: bool,
     client: PostemClient,
-    theme: Theme,
+    error: Option<PostemError>,
+    pub(crate) theme: Theme,
     door_mat: Option<DoorMat>,
-    // recipients: Vec<PostemName>,
-    // payload: Option<Bytes>,
     char_input_buffer: Option<char>,
     post_recipients_input: String,
     post_message_input: String,
@@ -99,15 +101,31 @@ pub struct App {
 }
 impl App {
     pub fn change_state(&mut self, app_state: AppState) {
+        self.previous_state = self.app_state;
         self.app_state = app_state;
     }
 
+    pub fn return_to_previous_state(&mut self) {
+        self.app_state = self.previous_state;
+    }
+
     pub fn app_state(&self) -> AppState {
-        self.app_state
+        self.app_state.clone()
     }
 
     pub fn theme(&self) -> Theme {
         self.theme.clone()
+    }
+
+    pub fn toggle_menu(&mut self) {
+        self.menu_visible = match self.menu_visible {
+            true => false,
+            false => true,
+        }
+    }
+
+    pub fn menu_visible(&self) -> bool {
+        self.menu_visible
     }
 
     pub fn post_recipients_input(&self) -> &str {
@@ -148,16 +166,37 @@ impl App {
         }
     }
 
+    pub fn error(&self) -> Option<PostemError> {
+        self.error.clone()
+    }
+
+    // pub fn error_text(&self) -> String {
+    //     match self.error {
+    //         Some(e) => format!("{e}"),
+    //         None => "".to_string(),
+    //     }
+    // }
+
+    pub fn set_error(&mut self, error: PostemError) {
+        self.error = Some(error);
+        self.change_state(AppState::Error);
+    }
+
+    pub fn clear_error(&mut self) {
+        self.error = None;
+    }
+
     pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
         let client = PostemClient::init(connection_type).await?;
         Ok(App {
             connection_type,
             app_state: AppState::None,
+            previous_state: AppState::None,
+            menu_visible: false,
             client,
+            error: None,
             theme: Theme::surf_bored_synth_wave(),
             door_mat: None,
-            // recipients: vec![],
-            // payload: None,
             char_input_buffer: None,
             post_recipients_input: String::new(),
             post_message_input: String::new(),

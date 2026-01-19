@@ -35,7 +35,7 @@ impl InputType {
         ))
     }
 
-    fn derive(app: &mut App, app_state: AppState, key_event: KeyEvent) -> InputType {
+    pub fn derive(app: &mut App, app_state: AppState, key_event: KeyEvent) -> InputType {
         match app_state {
             AppState::CreateAddressee(_) | AppState::PostPackage(_) => {
                 if key_event.modifiers.is_empty() || key_event.modifiers == KeyModifiers::SHIFT {
@@ -104,6 +104,11 @@ fn about(app: &mut App) -> Result<(), PostemError> {
 
 fn quit(app: &mut App) -> Result<(), PostemError> {
     app.change_state(AppState::Quit);
+    Ok(())
+}
+
+fn close_error_pop_up(app: &mut App) -> Result<(), PostemError> {
+    app.return_to_previous_state();
     Ok(())
 }
 
@@ -215,6 +220,24 @@ impl AppInteractions {
         actions.insert(input, action);
         interactions.insert(app_state, actions);
 
+        // From AppState::Error
+        let app_state = AppState::Error;
+        let mut actions = HashMap::new();
+        let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        let action = Action::create(None, None, ToExecute::SyncFunction(quit));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('q'), KeyModifiers::empty());
+        let action = Action::create(None, None, ToExecute::SyncFunction(quit));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+        let action = Action::create(
+            None,
+            Some("Press enter to continue"),
+            ToExecute::SyncFunction(close_error_pop_up),
+        );
+        actions.insert(input, action);
+        interactions.insert(app_state, actions);
+
         AppInteractions { interactions }
     }
 
@@ -302,16 +325,16 @@ fn create_text_input_actions() -> HashMap<InputType, Action> {
 
 mod tests {
 
-    use crate::ui::wait_pop_up;
+    // use crate::ui::wait_pop_up;
 
     use super::*;
-    use ratatui::{
-        Terminal,
-        backend::{Backend, CrosstermBackend},
-        buffer::Buffer,
-        layout::Rect,
-    };
-    use std::io;
+    // use ratatui::{
+    //     Terminal,
+    //     backend::{Backend, CrosstermBackend},
+    //     buffer::Buffer,
+    //     layout::Rect,
+    // };
+    // use std::io;
 
     #[tokio::test]
     async fn test_app_interactions() {
@@ -420,23 +443,24 @@ mod tests {
                 input,
             )
             .unwrap();
-        let theme = app.theme();
+        // let theme = app.theme();
         app.change_state(AppState::PostPackage(PostPackageState::InputMessage));
         eprintln!("{}", app.post_message_input());
         let async_fn = action.execute_or_async(&mut app).unwrap();
         assert!(async_fn.is_some());
-        let mut stdout = io::stdout();
-        let backend = CrosstermBackend::new(stdout);
-        let mut terminal = Terminal::new(backend).unwrap();
-        let buffer = Buffer::empty(Rect::new(0, 0, 1, 1));
-        let wait_result = wait_pop_up(
-            &mut terminal,
-            buffer,
-            async_fn.unwrap(),
-            "Testing...1...2...3",
-            theme,
-        )
-        .await;
-        assert_eq!(wait_result, Ok(()));
+        // commented out as makes test out put hard to read
+        // let mut stdout = io::stdout();
+        // let backend = CrosstermBackend::new(stdout);
+        // let mut terminal = Terminal::new(backend).unwrap();
+        // let buffer = Buffer::empty(Rect::new(0, 0, 1, 1));
+        // let wait_result = wait_pop_up(
+        //     &mut terminal,
+        //     buffer,
+        //     async_fn.unwrap(),
+        //     "Testing...1...2...3",
+        //     theme,
+        // )
+        // .await;
+        // assert_eq!(wait_result, Ok(()));
     }
 }
