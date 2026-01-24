@@ -81,7 +81,7 @@ async fn run_app<B: Backend>(
     app: &mut App,
 ) -> Result<(), Box<dyn Error>> {
     let interactions = AppInteractions::new();
-    let previous_buffer = terminal.draw(|f| ui(f, app, &interactions))?.buffer.clone();
+    // let previous_buffer = terminal.draw(|f| ui(f, app, &interactions))?.buffer.clone();
     loop {
         let previous_buffer = terminal.draw(|f| ui(f, app, &interactions))?.buffer.clone();
         if let Event::Key(key) = event::read()? {
@@ -94,12 +94,12 @@ async fn run_app<B: Backend>(
             let input = InputType::derive(app, app.app_state(), key);
             if let Some(action) = interactions.get(app.app_state(), input) {
                 match action.execute_or_async(app) {
-                    Ok(Some(async_function)) => {
+                    Ok(Some((async_function, message))) => {
                         match wait_pop_up(
                             terminal,
                             previous_buffer,
                             async_function,
-                            "How should I know what message to say...",
+                            &message,
                             theme,
                         )
                         .await
@@ -113,7 +113,7 @@ async fn run_app<B: Backend>(
                 }
             }
             if let Some(error) = error {
-                app.set_error(error);
+                app.set_error_text(&format!("{error}"));
             }
         }
         if app.app_state() == AppState::Quit {

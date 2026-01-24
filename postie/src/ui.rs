@@ -30,7 +30,7 @@ use std::cmp::min;
 use tokio::time::{Duration, sleep};
 
 use crate::App;
-use crate::app::{AppState, PostPackageState};
+use crate::app::{AppState, CreateAddresseeState, PostPackageState};
 use crate::interactions::AppInteractions;
 use crate::theme::Theme;
 
@@ -65,7 +65,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
     // modify based on current_view
     match &app.app_state() {
         AppState::Error => {
-            if let Some(error) = app.error() {
+            if let Some(error) = app.error_text() {
                 status_text = "Press (enter) to contunue or (q) to quit".to_string();
                 let pop_up_rect = area.inner(Margin::new(area.width / 4, area.height / 4)); //centered_rect(60, 60, area);
                 let navigation_text = "Press (enter) to contiune.";
@@ -122,6 +122,52 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                 Paragraph::new(Text::styled(navigation_text, Style::default()).not_rapid_blink())
                     .alignment(Alignment::Center);
             frame.render_widget(navigation_text, pop_up_chunks[1]);
+        }
+        AppState::CreateAddressee(create_address_state) => {
+            let pop_up_rect = area.inner(Margin::new(area.width / 8, area.height / 5));
+            let warning = "THIS IS EXPERIMENTAL SOFTWARE AND STORAGE COSTS MAY VARY WITHOUT WARNING SO DO NOT USE A WALLET WITH YOUR LIFE SAVINGS IN OR INDEED CONTAINING ANY AMOUNT YOU ARE NOT PREPARED TO LOSE IN ENTIRETY";
+            Clear.render(pop_up_rect, frame.buffer_mut());
+            let pop_up_block = Block::default()
+                .title("Create new postem address")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
+                .style(app.theme.text_style());
+            frame.render_widget(pop_up_block, pop_up_rect);
+            let pop_up_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .margin(1)
+                .constraints([
+                    Constraint::Percentage(40),
+                    Constraint::Percentage(30),
+                    Constraint::Percentage(40),
+                ])
+                .split(pop_up_rect);
+            let mut name_block = Block::default()
+                .title("Enter desired address: No semi-colons, commas or whitesapce");
+            let mut key_block = Block::default()
+                .title("Enter private key of funding wallet")
+                .style(app.theme.text_style());
+            let warning_block = Block::default().style(app.theme.header_style()).bold();
+            match create_address_state {
+                CreateAddresseeState::InputAddresseeName => {
+                    status_text =
+                        "Type to enter addressee name, press (enter) to proceed or (esc) to go leave"
+                            .to_string();
+                    name_block = name_block.clone().style(app.theme.inverted_text_style())
+                }
+                CreateAddresseeState::InputFundingWallet => {
+                    status_text = "Type to enter key or use terminal emulator paste (enter) to proceed, (tab) to edit name or (esc) to leave".to_string();
+                    key_block = key_block.clone().style(app.theme.inverted_text_style())
+                }
+            };
+            let name_text = Paragraph::new(app.create_name_input().clone()).block(name_block);
+            let key_text = Paragraph::new(app.create_key_input().clone()).block(key_block);
+            let warning_text = Paragraph::new(warning)
+                .wrap(Wrap { trim: false })
+                .block(warning_block);
+            frame.render_widget(name_text, pop_up_chunks[0]);
+            frame.render_widget(warning_text, pop_up_chunks[1]);
+            frame.render_widget(key_text, pop_up_chunks[2]);
         }
         AppState::PostPackage(post_package_state) => {
             let pop_up_rect = area.inner(Margin::new(area.width / 8, area.height / 5));

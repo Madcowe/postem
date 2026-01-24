@@ -82,11 +82,14 @@ impl Action {
     pub fn execute_or_async(
         &self,
         app: &mut App,
-    ) -> Result<Option<impl Future<Output = Result<(), PostemError>>>, PostemError> {
+    ) -> Result<Option<(impl Future<Output = Result<(), PostemError>>, String)>, PostemError> {
         match self.to_execute {
             ToExecute::SyncFunction(sync_function) => sync_function(app)?,
             ToExecute::EstimatePostage => {
-                return Ok(Some(estimate_postage(app)));
+                return Ok(Some((
+                    estimate_postage(app),
+                    "Estimating postage cost...".to_string(),
+                )));
             }
         }
         Ok(None)
@@ -109,6 +112,7 @@ fn quit(app: &mut App) -> Result<(), PostemError> {
 
 fn close_error_pop_up(app: &mut App) -> Result<(), PostemError> {
     app.return_to_previous_state();
+    app.clear_error_text();
     Ok(())
 }
 
@@ -154,6 +158,15 @@ fn toggle_sub_state_backwards(app: &mut App) -> Result<(), PostemError> {
 // async functions are returned by execute_or_async so that the main loop can send to wait pop up
 // ------------------------------------------------------------------------------------------------
 
+async fn estimate_addressee(app: &mut App) -> Result<(), PostemError> {
+    app.set_cost_estimate(
+        app.check_addressee_available(&app.create_name_input())
+            .await?,
+    );
+    app.change_state(AppState::Confirm);
+    Ok(())
+}
+
 async fn estimate_postage(app: &mut App) -> Result<(), PostemError> {
     let mut message = app.post_message_input();
     // if message less that 3 characters add white space up to that as needs to be a lests 3 bytes
@@ -168,6 +181,7 @@ async fn estimate_postage(app: &mut App) -> Result<(), PostemError> {
     let payload = Bytes::from(message);
     let no_of_recipients = app.split_recipients().len();
     app.set_cost_estimate(app.estimate_postage(payload, no_of_recipients).await?);
+    app.change_state(AppState::Confirm);
     Ok(())
 }
 
@@ -198,6 +212,39 @@ impl AppInteractions {
         actions.insert(input, action);
         interactions.insert(app_state, actions);
 
+        // From AppState::Error
+        let app_state = AppState::Error;
+        let mut actions = HashMap::new();
+        let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        let action = Action::create(None, None, ToExecute::SyncFunction(quit));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('q'), KeyModifiers::empty());
+        let action = Action::create(None, None, ToExecute::SyncFunction(quit));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+        let action = Action::create(
+            None,
+            Some("Press enter to continue"),
+            ToExecute::SyncFunction(close_error_pop_up),
+        );
+        actions.insert(input, action);
+        interactions.insert(app_state, actions);
+
+        // From AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName)
+        let app_state = AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName);
+        let mut actions = create_text_input_actions();
+        let action = Action::create(None, None, ToExecute::SyncFunction(toggle_sub_state));
+        let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+        actions.insert(input, action.clone());
+        interactions.insert(app_state, actions);
+        // From AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet)
+        let app_state = AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet);
+        let mut actions = create_text_input_actions();
+        let action = Action::create(None, None, ToExecute::EstimatePostage);
+        let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+        actions.insert(input, action);
+        interactions.insert(app_state, actions);
+
         // From AppState::PostPackage(PostPackageState::InputRecipients)
         let app_state = AppState::PostPackage(PostPackageState::InputRecipients);
         let mut actions = create_text_input_actions();
@@ -217,24 +264,6 @@ impl AppInteractions {
         let mut actions = create_text_input_actions();
         let action = Action::create(None, None, ToExecute::EstimatePostage);
         let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
-        actions.insert(input, action);
-        interactions.insert(app_state, actions);
-
-        // From AppState::Error
-        let app_state = AppState::Error;
-        let mut actions = HashMap::new();
-        let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
-        let action = Action::create(None, None, ToExecute::SyncFunction(quit));
-        actions.insert(input, action);
-        let input = InputType::create_key_press(KeyCode::Char('q'), KeyModifiers::empty());
-        let action = Action::create(None, None, ToExecute::SyncFunction(quit));
-        actions.insert(input, action);
-        let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
-        let action = Action::create(
-            None,
-            Some("Press enter to continue"),
-            ToExecute::SyncFunction(close_error_pop_up),
-        );
         actions.insert(input, action);
         interactions.insert(app_state, actions);
 

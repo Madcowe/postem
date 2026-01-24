@@ -193,7 +193,6 @@ impl PostemClient {
         let base = route.base();
         let mut seal = None;
         for i in 0..NUMBER_OF_RETRIES_TO_POST_SEMI_CREATED_PACKAGE {
-            eprintln!("Retrying posting package {i}");
             let location = self.location_get_available(&mut route).await?;
             // if location is used (as it may have been since the route was got) then it needs to find
             // next availabel location and try again...probably several times

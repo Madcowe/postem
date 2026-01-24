@@ -19,14 +19,15 @@ use autonomi::{AttoTokens, Bytes, SecretKey};
 use postem::{
     Addressee, ConnectionType, DoorMat, Package, PostemClient, PostemError, addressee::PostemName,
 };
+use ratatui::crossterm::style::Stylize;
 
 use crate::theme::Theme;
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum AppState {
     About,
     None,
     Error,
+    Confirm,
     Quit,
     CreateAddressee(CreateAddresseeState),
     PostPackage(PostPackageState),
@@ -37,13 +38,13 @@ pub enum AppState {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum CreateAddresseeState {
     InputAddresseeName,
-    InputFundingWalled,
+    InputFundingWallet,
 }
 impl CreateAddresseeState {
     pub fn toggle(&self) -> CreateAddresseeState {
         match self {
-            CreateAddresseeState::InputAddresseeName => CreateAddresseeState::InputFundingWalled,
-            CreateAddresseeState::InputFundingWalled => CreateAddresseeState::InputAddresseeName,
+            CreateAddresseeState::InputAddresseeName => CreateAddresseeState::InputFundingWallet,
+            CreateAddresseeState::InputFundingWallet => CreateAddresseeState::InputAddresseeName,
         }
     }
 }
@@ -88,7 +89,7 @@ pub struct App {
     previous_state: AppState,
     menu_visible: bool,
     client: PostemClient,
-    error: Option<PostemError>,
+    error_text: Option<String>,
     pub(crate) theme: Theme,
     door_mat: Option<DoorMat>,
     char_input_buffer: Option<char>,
@@ -101,7 +102,10 @@ pub struct App {
 }
 impl App {
     pub fn change_state(&mut self, app_state: AppState) {
-        self.previous_state = self.app_state;
+        match self.app_state {
+            AppState::Error | AppState::Confirm => (),
+            _ => self.previous_state = self.app_state,
+        }
         self.app_state = app_state;
     }
 
@@ -140,12 +144,12 @@ impl App {
         &self.post_key_input
     }
 
-    pub fn create_name_input(&self) -> &str {
-        &self.create_name_input
+    pub fn create_name_input(&self) -> String {
+        self.create_name_input.to_string()
     }
 
-    pub fn create_key_input(&self) -> &str {
-        &self.create_key_input
+    pub fn create_key_input(&self) -> String {
+        self.create_key_input.to_string()
     }
 
     pub fn set_cost_estimate(&mut self, value: AttoTokens) {
@@ -155,9 +159,7 @@ impl App {
     pub fn toggle_sub_state(&mut self, forward: bool) {
         match self.app_state {
             AppState::PostPackage(post_package_state) => {
-                eprintln!("app: {:?} local: {:?}", self.app_state, post_package_state);
                 self.change_state(AppState::PostPackage(post_package_state.toggle(forward)));
-                eprintln!("app: {:?} local: {:?}", self.app_state, post_package_state);
             }
             AppState::CreateAddressee(create_addressee_state) => {
                 self.change_state(AppState::CreateAddressee(create_addressee_state.toggle()));
@@ -166,24 +168,17 @@ impl App {
         }
     }
 
-    pub fn error(&self) -> Option<PostemError> {
-        self.error.clone()
+    pub fn error_text(&self) -> Option<String> {
+        self.error_text.clone()
     }
 
-    // pub fn error_text(&self) -> String {
-    //     match self.error {
-    //         Some(e) => format!("{e}"),
-    //         None => "".to_string(),
-    //     }
-    // }
-
-    pub fn set_error(&mut self, error: PostemError) {
-        self.error = Some(error);
+    pub fn set_error_text(&mut self, error_text: &str) {
+        self.error_text = Some(error_text.to_string());
         self.change_state(AppState::Error);
     }
 
-    pub fn clear_error(&mut self) {
-        self.error = None;
+    pub fn clear_error_text(&mut self) {
+        self.error_text = None;
     }
 
     pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
@@ -194,7 +189,7 @@ impl App {
             previous_state: AppState::None,
             menu_visible: false,
             client,
-            error: None,
+            error_text: None,
             theme: Theme::surf_bored_synth_wave(),
             door_mat: None,
             char_input_buffer: None,
@@ -226,7 +221,7 @@ impl App {
                 AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName) => {
                     self.create_name_input.push(char)
                 }
-                AppState::CreateAddressee(CreateAddresseeState::InputFundingWalled) => {
+                AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
                     self.create_key_input.push(char)
                 }
                 _ => (),
@@ -246,7 +241,7 @@ impl App {
             AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName) => {
                 self.create_name_input.pop()
             }
-            AppState::CreateAddressee(CreateAddresseeState::InputFundingWalled) => {
+            AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
                 self.create_key_input.pop()
             }
             _ => None,
@@ -267,7 +262,7 @@ impl App {
             AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName) => {
                 self.create_name_input = String::new()
             }
-            AppState::CreateAddressee(CreateAddresseeState::InputFundingWalled) => {
+            AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
                 self.create_key_input = String::new()
             }
             _ => (),
@@ -327,10 +322,10 @@ impl App {
         }
     }
 
-    pub fn split_recipients(&self) -> Vec<String> {
+    pub fn split_recipients(&self) -> Vec<&str> {
         self.post_recipients_input
             .split(',')
-            .map(|s| s.to_string())
+            // .map(|s| s.to_string())
             .collect()
     }
 
@@ -397,6 +392,47 @@ impl App {
             }
         }
         Ok((failed_recipients, cost))
+    }
+
+    pub async fn carry_out_transaction(&mut self) -> Result<(), PostemError> {
+        match self.previous_state {
+            AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
+                let name = self.create_name_input();
+                let key = self.create_key_input();
+                match self.create_addressee(&name, &key).await {
+                    Ok(cost) => self
+                        .set_error_text(&format!("Succesfully created address for {} attos", cost)),
+                    Err(e) => self.set_error_text(&format!("{e}")),
+                }
+            }
+            AppState::PostPackage(PostPackageState::InputFundingWallet) => {
+                let (recipients, invalid_addresses) =
+                    self.check_recipients(self.split_recipients()).await?;
+                let message = self.post_message_input();
+                let payload = Bytes::from(message);
+                match self
+                    .post_packages(recipients, payload, &self.post_key_input)
+                    .await
+                {
+                    Ok((failed_addresses, cost)) => {
+                        let failed_addresses: Vec<String> =
+                            failed_addresses.iter().map(|a| a.name()).collect();
+                        let mut text = format!("Package sent for {} attos", cost);
+                        if !failed_addresses.is_empty() {
+                            text = text
+                                + &format!(
+                                    "\nHowever could nto send to the follwing addresses {}",
+                                    failed_addresses.join(", ")
+                                );
+                            self.set_error_text(&text);
+                        }
+                    }
+                    Err(e) => self.set_error_text(&format!("{e}")),
+                }
+            }
+            _ => (),
+        }
+        Ok(())
     }
 }
 
@@ -531,7 +567,7 @@ mod tests {
         create_addressee_state = create_addressee_state.toggle();
         assert_eq!(
             create_addressee_state,
-            CreateAddresseeState::InputFundingWalled
+            CreateAddresseeState::InputFundingWallet
         );
         create_addressee_state = create_addressee_state.toggle();
         assert_eq!(
