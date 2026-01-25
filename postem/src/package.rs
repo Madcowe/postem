@@ -73,7 +73,7 @@ impl Package {
         self.payload = Some(payload);
     }
 
-    /// clones the pacakge and adds a payload
+    /// clones the package and adds a payload
     /// for use when opening packages which won't initally have a payload
     pub fn clone_with_new_payload(&self, payload: Bytes) -> Package {
         let mut package = self.clone();

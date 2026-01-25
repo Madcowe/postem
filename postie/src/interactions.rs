@@ -18,6 +18,8 @@ use autonomi::{Bytes, PaymentMode};
 use postem::PostemError;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::collections::HashMap;
+use std::pin::Pin;
+use tokio::time::{Duration, sleep};
 
 use crate::app::{App, AppState, CreateAddresseeState, PostPackageState};
 
@@ -54,6 +56,7 @@ impl InputType {
 #[derive(Clone, Debug)]
 pub enum ToExecute {
     SyncFunction(fn(&mut App) -> Result<(), PostemError>),
+    EstimateNewAddress,
     EstimatePostage,
 }
 
@@ -79,16 +82,28 @@ impl Action {
     }
 
     // executes if sync function or return async function to be passed to wait pop up
-    pub fn execute_or_async(
-        &self,
-        app: &mut App,
-    ) -> Result<Option<(impl Future<Output = Result<(), PostemError>>, String)>, PostemError> {
+    pub fn execute_or_async<'a>(
+        &'a self,
+        app: &'a mut App,
+    ) -> Result<
+        Option<(
+            Pin<Box<dyn Future<Output = Result<(), PostemError>> + 'a>>,
+            String,
+        )>,
+        PostemError,
+    > {
         match self.to_execute {
             ToExecute::SyncFunction(sync_function) => sync_function(app)?,
             ToExecute::EstimatePostage => {
                 return Ok(Some((
-                    estimate_postage(app),
+                    Box::pin(estimate_postage(app)),
                     "Estimating postage cost...".to_string(),
+                )));
+            }
+            ToExecute::EstimateNewAddress => {
+                return Ok(Some((
+                    Box::pin(estimate_addressee(app)),
+                    "Estimating cost of creating address...".to_string(),
                 )));
             }
         }
@@ -152,6 +167,28 @@ fn toggle_sub_state_backwards(app: &mut App) -> Result<(), PostemError> {
     app.toggle_sub_state(false);
     Ok(())
 }
+
+fn confirm_transaction(app: &mut App) -> Result<(), PostemError> {
+    app.set_transaction_confirmed(true);
+    app.return_to_previous_state();
+    Ok(())
+}
+
+fn cancel_transaction(app: &mut App) -> Result<(), PostemError> {
+    app.set_transaction_confirmed(false);
+    app.return_to_previous_state();
+    Ok(())
+}
+
+fn leave_text_input(app: &mut App) -> Result<(), PostemError> {
+    if app.has_doormat() {
+        app.change_state(AppState::ViewDoormat);
+    } else {
+        app.change_state(AppState::None);
+    }
+    Ok(())
+}
+
 // ------------------------------------------------------------------------------------------------
 
 // ------------------------------------------------------------------------------------------------
@@ -164,6 +201,15 @@ async fn estimate_addressee(app: &mut App) -> Result<(), PostemError> {
             .await?,
     );
     app.change_state(AppState::Confirm);
+    while app.app_state() == AppState::Confirm {
+        tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+    }
+    if app.transaction_confirmed()
+        && app.app_state() == AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet)
+    {
+        app.create_addressee(&app.create_name_input(), &app.create_key_input())
+            .await?;
+    }
     Ok(())
 }
 
@@ -182,6 +228,7 @@ async fn estimate_postage(app: &mut App) -> Result<(), PostemError> {
     let no_of_recipients = app.split_recipients().len();
     app.set_cost_estimate(app.estimate_postage(payload, no_of_recipients).await?);
     app.change_state(AppState::Confirm);
+
     Ok(())
 }
 
@@ -225,6 +272,24 @@ impl AppInteractions {
         let action = Action::create(
             None,
             Some("Press enter to continue"),
+            ToExecute::SyncFunction(close_error_pop_up),
+        );
+        actions.insert(input, action);
+        interactions.insert(app_state, actions);
+
+        // From AppState::Confirm
+        let app_state = AppState::Confirm;
+        let mut actions = HashMap::new();
+        let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        let action = Action::create(None, None, ToExecute::SyncFunction(quit));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('q'), KeyModifiers::empty());
+        let action = Action::create(None, None, ToExecute::SyncFunction(quit));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('y'), KeyModifiers::empty());
+        let action = Action::create(
+            None,
+            Some("Press y to confirm"),
             ToExecute::SyncFunction(close_error_pop_up),
         );
         actions.insert(input, action);
@@ -335,6 +400,9 @@ fn create_text_input_actions() -> HashMap<InputType, Action> {
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Char('u'), KeyModifiers::CONTROL);
     let action = Action::create(None, None, ToExecute::SyncFunction(text_clear));
+    actions.insert(input, action);
+    let input = InputType::create_key_press(KeyCode::Esc, KeyModifiers::empty());
+    let action = Action::create(None, None, ToExecute::SyncFunction(leave_text_input));
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Tab, KeyModifiers::empty());
     let action = Action::create(None, None, ToExecute::SyncFunction(toggle_sub_state));

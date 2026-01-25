@@ -86,7 +86,7 @@ impl PostemClient {
     }
 }
 
-/// The base of a postem address from which the location of all received pacakges can be derived
+/// The base of a postem address from which the location of all received packages can be derived
 /// the first entry in parents is the (address/public key) of a pointer to the last received package
 /// the key pair used to create said pointer is also use for encrypton, the content is the
 /// derivation index that will be used to generate all subseqent package locations.
@@ -226,10 +226,10 @@ impl PostemClient {
 }
 
 /// The addressee which can receive packages. Consisting of the address where the base is located,
-/// the base from which the location of pacakges sent to it can be derived, and last received a
+/// the base from which the location of packages sent to it can be derived, and last received a
 /// pointer to the latest package received. Received in this context means the owner of the
 /// address has followed the chain of location from the base up to this point...there may well be
-/// pacakges that have been sent since they last checked beyond this location and the package
+/// packages that have been sent since they last checked beyond this location and the package
 /// at the location may not be valid.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Addressee {
@@ -345,15 +345,15 @@ impl PostemClient {
         addressee: &mut Addressee,
         packages: &Vec<Package>,
     ) -> Result<Vec<Package>, PostemError> {
-        let open_pacakges = self.packages_open(packages, addressee.secret_key()).await?;
-        if let Some(package) = open_pacakges.last() {
+        let open_packages = self.packages_open(packages, addressee.secret_key()).await?;
+        if let Some(package) = open_packages.last() {
             self.addressee_set_last_received(
                 addressee,
                 GraphEntryAddress::new(package.address().owner),
             )
             .await?;
         }
-        Ok(open_pacakges)
+        Ok(open_packages)
     }
 
     pub async fn addressee_get_packages(
@@ -586,7 +586,7 @@ mod tests {
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        // try retreiving pacakges when none have been sen
+        // try retreiving packages when none have been sen
         let packages = client
             .addressee_get_packages(&mut addressee, true)
             .await
@@ -662,7 +662,7 @@ mod tests {
             .unwrap();
         assert!(!items.is_empty());
         assert_eq!(message, items.first().unwrap().payload().unwrap());
-        // check if not derived from base it doesn't return anything are now new pacakges
+        // check if not derived from base it doesn't return anything are now new packages
         let packages = client
             .addressee_get_packages(&mut addressee, false)
             .await

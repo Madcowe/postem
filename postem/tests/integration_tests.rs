@@ -139,7 +139,7 @@ async fn test_post_to_non_existing_address() {
     // Returns Err(GraphEntryError("Record could not be found."))}...which would Be GraphError::GetError(GetError::RecordNotFound)
 }
 
-// stress test adding a lot of pack:ges and thousands of non-pacakges will take 25 mins+ to run
+// stress test adding a lot of pack:ges and thousands of non-packages will take 25 mins+ to run
 #[tokio::test]
 #[ignore]
 async fn fan_mail() {
@@ -178,7 +178,7 @@ async fn fan_mail() {
         message
     );
     assert_eq!(door_mat.items().last().unwrap().payload().unwrap(), message);
-    // send load of non pacakges
+    // send load of non packages
     for i in 0..items_to_send {
         let mut route = client
             .route_get(PostemName::create(&name).unwrap(), false)
@@ -234,9 +234,9 @@ async fn fan_mail() {
     );
 }
 
-// test sending loads of pacakges is quickly as possible using mutiple threads as just looping
+// test sending loads of packages is quickly as possible using mutiple threads as just looping
 // async call seem to be in the region of 0.5-1 sec apart and I want to test if it retries if
-// an location on the route has been used before a post_pacakge call completes
+// an location on the route has been used before a post_package call completes
 // no quicker then doing async...maybe explicit test in package for this
 #[tokio::test]
 async fn heavy_traffic() {

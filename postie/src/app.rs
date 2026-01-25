@@ -22,6 +22,8 @@ use postem::{
 use ratatui::crossterm::style::Stylize;
 
 use crate::theme::Theme;
+use crate::ui::wait_pop_up;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum AppState {
     About,
@@ -99,8 +101,31 @@ pub struct App {
     create_name_input: String,
     create_key_input: String,
     cost_estimate: AttoTokens,
+    transaction_confirmed: bool,
 }
 impl App {
+    pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
+        let client = PostemClient::init(connection_type).await?;
+        Ok(App {
+            connection_type,
+            app_state: AppState::None,
+            previous_state: AppState::None,
+            menu_visible: false,
+            client,
+            error_text: None,
+            theme: Theme::surf_bored_synth_wave(),
+            door_mat: None,
+            char_input_buffer: None,
+            post_recipients_input: String::new(),
+            post_message_input: String::new(),
+            post_key_input: String::new(),
+            create_name_input: String::new(),
+            create_key_input: String::new(),
+            cost_estimate: AttoTokens::zero(),
+            transaction_confirmed: false,
+        })
+    }
+
     pub fn change_state(&mut self, app_state: AppState) {
         match self.app_state {
             AppState::Error | AppState::Confirm => (),
@@ -126,6 +151,10 @@ impl App {
             true => false,
             false => true,
         }
+    }
+
+    pub fn has_doormat(&self) -> bool {
+        self.door_mat.is_some()
     }
 
     pub fn menu_visible(&self) -> bool {
@@ -156,6 +185,49 @@ impl App {
         self.cost_estimate = value;
     }
 
+    pub fn confirm_message(&self) -> Option<String> {
+        if self.app_state == AppState::Confirm {
+            match self.previous_state {
+                AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
+                    Some(format!(
+                        "Estimated cost of creating new address: {} attos.",
+                        self.cost_estimate
+                    ))
+                }
+                AppState::PostPackage(PostPackageState::InputFundingWallet) => Some(format!(
+                    "Estimate cost of posting package(s): {} attos.",
+                    self.cost_estimate
+                )),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn transaction_confirmed(&self) -> bool {
+        self.transaction_confirmed
+    }
+
+    pub fn set_transaction_confirmed(&mut self, transaction_confirmed: bool) {
+        self.transaction_confirmed = transaction_confirmed;
+    }
+
+    // pub fn confirm_transaction(&self) {
+    //     if self.app_state == AppState::Confirm {
+    //         match self.previous_state {
+    //             AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
+    //                 match wait_pop_up(terminal, previous_buffer, async_function, &message, theme)
+    //                     .await
+    //                 {
+    //                     Err(e) => error = Some(e),
+    //                     _ => (),
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+
     pub fn toggle_sub_state(&mut self, forward: bool) {
         match self.app_state {
             AppState::PostPackage(post_package_state) => {
@@ -179,27 +251,6 @@ impl App {
 
     pub fn clear_error_text(&mut self) {
         self.error_text = None;
-    }
-
-    pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
-        let client = PostemClient::init(connection_type).await?;
-        Ok(App {
-            connection_type,
-            app_state: AppState::None,
-            previous_state: AppState::None,
-            menu_visible: false,
-            client,
-            error_text: None,
-            theme: Theme::surf_bored_synth_wave(),
-            door_mat: None,
-            char_input_buffer: None,
-            post_recipients_input: String::new(),
-            post_message_input: String::new(),
-            post_key_input: String::new(),
-            create_name_input: String::new(),
-            create_key_input: String::new(),
-            cost_estimate: AttoTokens::zero(),
-        })
     }
 
     pub fn set_chat_input_buffer(&mut self, value: char) {

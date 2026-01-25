@@ -63,7 +63,7 @@ pub enum PostemError {
     #[error("Postem address does not exist: {0}")]
     InvalidAddress(String),
     #[error(
-        "Storage location repeatdily being used before pacakge is fully posted, chunk address of seal included for resuse"
+        "Storage location repeatdily being used before package is fully posted, chunk address of seal included for resuse"
     )]
     ChasingItsTail(Chunk),
     #[error("Antnet request never returned")]

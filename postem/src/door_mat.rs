@@ -17,7 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 use crate::{Addressee, Package, PostemClient, PostemError, addressee::PostemName, door_mat};
 use autonomi::SecretKey;
 
-/// A collection of all valid open pacakges for an addressee
+/// A collection of all valid open packages for an addressee
 #[derive(Clone, Debug, PartialEq)]
 pub struct DoorMat {
     addressee: Addressee,
@@ -54,7 +54,7 @@ impl PostemClient {
         Ok(DoorMat { addressee, items })
     }
 
-    /// check if any new pacakges and downloads returns true if this is the case
+    /// check if any new packages and downloads returns true if this is the case
     pub async fn doormat_update(&mut self, door_mat: &mut DoorMat) -> Result<bool, PostemError> {
         let mut you_have_got_mail = false;
         let new_packages = self

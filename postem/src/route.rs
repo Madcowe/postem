@@ -139,13 +139,13 @@ impl PostemClient {
     /// depends on the value of derive_from_base when route_get was called
     /// note the route's current location is modifed as the route is traversed
     /// you probably don;t want to call this on a route that has already called another function
-    /// that also does this (eg location_get_available) as you will miss most pacakges
+    /// that also does this (eg location_get_available) as you will miss most packages
     pub async fn route_get_packages(
         &self,
         route: &mut Route,
     ) -> Result<Vec<(Package, SecretKey)>, PostemError> {
         let mut packages = Vec::new();
-        // skip if at last received as don't need to return pacakge if already receieved
+        // skip if at last received as don't need to return package if already receieved
         // or if derived from base will just be base address
         if route.current_location.to_hex() == route.last_received.to_hex() {
             route.next();

@@ -66,7 +66,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
     match &app.app_state() {
         AppState::Error => {
             if let Some(error) = app.error_text() {
-                status_text = "Press (enter) to contunue or (q) to quit".to_string();
+                // status_text = "Press (enter) to contunue or (q) to quit".to_string();
                 let pop_up_rect = area.inner(Margin::new(area.width / 4, area.height / 4)); //centered_rect(60, 60, area);
                 let navigation_text = "Press (enter) to contiune.";
                 Clear.render(pop_up_rect, frame.buffer_mut());
@@ -94,8 +94,38 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                 frame.render_widget(navigation_text, pop_up_chunks[1]);
             }
         }
+        AppState::Confirm => {
+            if let Some(confirm_message) = app.confirm_message() {
+                // status_text = "does this appear anywhere".to_string();
+                let pop_up_rect = area.inner(Margin::new(area.width / 4, area.height / 4));
+                let navigation_text = "Press (y) to confirm or (n) ro cancel.";
+                Clear.render(pop_up_rect, frame.buffer_mut());
+                let pop_up_block = Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Thick)
+                    .style(app.theme.text_style());
+                frame.render_widget(pop_up_block, pop_up_rect);
+                let pop_up_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .margin(1)
+                    .constraints([
+                        Constraint::Percentage(100),
+                        Constraint::Min(navigation_text.lines().count() as u16),
+                    ])
+                    .split(pop_up_rect);
+                let confirm_message = confirm_message + "\nProceed with transaction?";
+                let pop_up_text = Paragraph::new(Text::styled(confirm_message, Style::default()))
+                    .wrap(Wrap { trim: false });
+                frame.render_widget(pop_up_text, pop_up_chunks[0]);
+                let navigation_text = Paragraph::new(
+                    Text::styled(navigation_text, Style::default()).not_rapid_blink(),
+                )
+                .alignment(Alignment::Center);
+                frame.render_widget(navigation_text, pop_up_chunks[1]);
+            }
+        }
         AppState::None => {
-            status_text = "Press p to post a package, or c to create a new address".to_string();
+            // status_text = "Press p to post a package, or c to create a new address".to_string();
             let pop_up_rect = area.inner(Margin::new(area.width / 4, area.height / 4));
             let navigation_text = interactions.get_menu_items(app.app_state()).join(", ");
             Clear.render(pop_up_rect, frame.buffer_mut());
@@ -113,7 +143,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                 ])
                 .split(pop_up_rect);
             let pop_up_text = Paragraph::new(Text::styled(
-                "Press p to post a pacakge or c to create a new address".to_string(),
+                "Press p to post a package or c to create a new address".to_string(),
                 Style::default(),
             ))
             .wrap(Wrap { trim: false });
@@ -190,8 +220,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                 ])
                 .split(pop_up_rect);
             let mut recipients_block = Block::default().title("Name").style(app.theme.text_style());
-            let mut message_block = Block::default()
-                .title("URL name: separate domains with full stops (.) leave blank for random URL");
+            let mut message_block = Block::default().title("Message text:");
             let mut key_block = Block::default()
                 .title("Private key of funding wallet")
                 .style(app.theme.text_style());
