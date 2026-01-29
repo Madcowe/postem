@@ -98,7 +98,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             if let Some(confirm_message) = app.confirm_message() {
                 // status_text = "does this appear anywhere".to_string();
                 let pop_up_rect = area.inner(Margin::new(area.width / 4, area.height / 4));
-                let navigation_text = "Press (y) to confirm or (n) ro cancel.";
+                let navigation_text = "Press (y) to confirm or (n) to cancel.";
                 Clear.render(pop_up_rect, frame.buffer_mut());
                 let pop_up_block = Block::default()
                     .borders(Borders::ALL)

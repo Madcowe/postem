@@ -58,6 +58,7 @@ pub enum ToExecute {
     SyncFunction(fn(&mut App) -> Result<(), PostemError>),
     EstimateNewAddress,
     EstimatePostage,
+    CompleteTransaction,
 }
 
 #[derive(Clone, Debug)]
@@ -104,6 +105,12 @@ impl Action {
                 return Ok(Some((
                     Box::pin(estimate_addressee(app)),
                     "Estimating cost of creating address...".to_string(),
+                )));
+            }
+            ToExecute::CompleteTransaction => {
+                return Ok(Some((
+                    Box::pin(complete_transaction(app)),
+                    "Uploading to antnet...".to_string(),
                 )));
             }
         }
@@ -204,12 +211,12 @@ async fn estimate_addressee(app: &mut App) -> Result<(), PostemError> {
     while app.app_state() == AppState::Confirm {
         tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
     }
-    if app.transaction_confirmed()
-        && app.app_state() == AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet)
-    {
-        app.create_addressee(&app.create_name_input(), &app.create_key_input())
-            .await?;
-    }
+    // if app.transaction_confirmed()
+    //     && app.app_state() == AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet)
+    // {
+    //     app.create_addressee(&app.create_name_input(), &app.create_key_input())
+    //         .await?;
+    // }
     Ok(())
 }
 
@@ -229,6 +236,19 @@ async fn estimate_postage(app: &mut App) -> Result<(), PostemError> {
     app.set_cost_estimate(app.estimate_postage(payload, no_of_recipients).await?);
     app.change_state(AppState::Confirm);
 
+    Ok(())
+}
+
+async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
+    if app.transaction_confirmed() {
+        match app.previous_state() {
+            AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
+                app.create_addressee(&app.create_name_input(), &app.create_key_input())
+                    .await?;
+            }
+            _ => (),
+        }
+    }
     Ok(())
 }
 

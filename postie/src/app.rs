@@ -142,6 +142,10 @@ impl App {
         self.app_state.clone()
     }
 
+    pub fn previous_state(&self) -> AppState {
+        self.previous_state.clone()
+    }
+
     pub fn theme(&self) -> Theme {
         self.theme.clone()
     }
@@ -212,21 +216,6 @@ impl App {
     pub fn set_transaction_confirmed(&mut self, transaction_confirmed: bool) {
         self.transaction_confirmed = transaction_confirmed;
     }
-
-    // pub fn confirm_transaction(&self) {
-    //     if self.app_state == AppState::Confirm {
-    //         match self.previous_state {
-    //             AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
-    //                 match wait_pop_up(terminal, previous_buffer, async_function, &message, theme)
-    //                     .await
-    //                 {
-    //                     Err(e) => error = Some(e),
-    //                     _ => (),
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
 
     pub fn toggle_sub_state(&mut self, forward: bool) {
         match self.app_state {
