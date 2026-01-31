@@ -138,6 +138,11 @@ fn close_error_pop_up(app: &mut App) -> Result<(), PostemError> {
     Ok(())
 }
 
+fn close_confirm_pop_up(app: &mut App) -> Result<(), PostemError> {
+    app.return_to_previous_state();
+    Ok(())
+}
+
 fn post_package(app: &mut App) -> Result<(), PostemError> {
     app.change_state(AppState::PostPackage(PostPackageState::InputRecipients));
     Ok(())
@@ -175,18 +180,6 @@ fn toggle_sub_state_backwards(app: &mut App) -> Result<(), PostemError> {
     Ok(())
 }
 
-fn confirm_transaction(app: &mut App) -> Result<(), PostemError> {
-    app.set_transaction_confirmed(true);
-    app.return_to_previous_state();
-    Ok(())
-}
-
-fn cancel_transaction(app: &mut App) -> Result<(), PostemError> {
-    app.set_transaction_confirmed(false);
-    app.return_to_previous_state();
-    Ok(())
-}
-
 fn leave_text_input(app: &mut App) -> Result<(), PostemError> {
     if app.has_doormat() {
         app.change_state(AppState::ViewDoormat);
@@ -211,12 +204,6 @@ async fn estimate_addressee(app: &mut App) -> Result<(), PostemError> {
     while app.app_state() == AppState::Confirm {
         tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
     }
-    // if app.transaction_confirmed()
-    //     && app.app_state() == AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet)
-    // {
-    //     app.create_addressee(&app.create_name_input(), &app.create_key_input())
-    //         .await?;
-    // }
     Ok(())
 }
 
@@ -240,15 +227,18 @@ async fn estimate_postage(app: &mut App) -> Result<(), PostemError> {
 }
 
 async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
-    if app.transaction_confirmed() {
-        match app.previous_state() {
-            AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
-                app.create_addressee(&app.create_name_input(), &app.create_key_input())
-                    .await?;
-            }
-            _ => (),
+    app.status = "Completing transaction!".to_string();
+    // if app.transaction_confirmed() {
+    match app.previous_state() {
+        AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
+            let cost = app
+                .create_addressee(&app.create_name_input(), &app.create_key_input())
+                .await?;
+            app.set_error_text(&format!("Address created for: {cost} attos"));
         }
+        _ => (),
     }
+    // }
     Ok(())
 }
 
@@ -306,11 +296,18 @@ impl AppInteractions {
         let input = InputType::create_key_press(KeyCode::Char('q'), KeyModifiers::empty());
         let action = Action::create(None, None, ToExecute::SyncFunction(quit));
         actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('n'), KeyModifiers::empty());
+        let action = Action::create(
+            None,
+            Some("Press n to cancel"),
+            ToExecute::SyncFunction(close_confirm_pop_up),
+        );
+        actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('y'), KeyModifiers::empty());
         let action = Action::create(
             None,
             Some("Press y to confirm"),
-            ToExecute::SyncFunction(close_error_pop_up),
+            ToExecute::CompleteTransaction,
         );
         actions.insert(input, action);
         interactions.insert(app_state, actions);

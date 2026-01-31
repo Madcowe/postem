@@ -48,11 +48,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
     println!("Trying to connect to antnet...");
     let mut connection_type = ConnectionType::Antnet;
-    if args.len() > 1 {
-        if &args[1] == "local" {
-            connection_type = ConnectionType::Local;
-        }
-    }
+    // if args.len() > 1 {
+    //     if &args[1] == "local" {
+    connection_type = ConnectionType::Local;
+    //     }
+    // }
     let mut app = App::create(connection_type).await?;
     // setup terminal
     enable_raw_mode()?;

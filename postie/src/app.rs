@@ -88,6 +88,7 @@ impl PostPackageState {
 pub struct App {
     connection_type: ConnectionType,
     app_state: AppState,
+    pub status: String,
     previous_state: AppState,
     menu_visible: bool,
     client: PostemClient,
@@ -101,7 +102,7 @@ pub struct App {
     create_name_input: String,
     create_key_input: String,
     cost_estimate: AttoTokens,
-    transaction_confirmed: bool,
+    // transaction_confirmed: bool,
 }
 impl App {
     pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
@@ -109,6 +110,7 @@ impl App {
         Ok(App {
             connection_type,
             app_state: AppState::None,
+            status: String::new(),
             previous_state: AppState::None,
             menu_visible: false,
             client,
@@ -122,7 +124,7 @@ impl App {
             create_name_input: String::new(),
             create_key_input: String::new(),
             cost_estimate: AttoTokens::zero(),
-            transaction_confirmed: false,
+            // transaction_confirmed: false,
         })
     }
 
@@ -207,14 +209,6 @@ impl App {
         } else {
             None
         }
-    }
-
-    pub fn transaction_confirmed(&self) -> bool {
-        self.transaction_confirmed
-    }
-
-    pub fn set_transaction_confirmed(&mut self, transaction_confirmed: bool) {
-        self.transaction_confirmed = transaction_confirmed;
     }
 
     pub fn toggle_sub_state(&mut self, forward: bool) {
@@ -333,6 +327,7 @@ impl App {
                 .doormat_init(addressee.secret_key(), name)
                 .await?,
         );
+        self.change_state(AppState::None); // change to view dormat when implemented
         Ok(cost)
     }
 
