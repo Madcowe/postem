@@ -171,8 +171,8 @@ impl App {
         &self.post_recipients_input
     }
 
-    pub fn post_message_input(&self) -> String {
-        self.post_message_input.to_string()
+    pub fn post_message_input(&self) -> Bytes {
+        Bytes::from(self.post_message_input.clone())
     }
 
     pub fn post_key_input(&self) -> &str {
@@ -328,6 +328,7 @@ impl App {
                 .await?,
         );
         self.change_state(AppState::None); // change to view dormat when implemented
+        self.create_name_input = String::new();
         Ok(cost)
     }
 
