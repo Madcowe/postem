@@ -208,21 +208,10 @@ async fn estimate_addressee(app: &mut App) -> Result<(), PostemError> {
 }
 
 async fn estimate_postage(app: &mut App) -> Result<(), PostemError> {
-    let mut message = app.post_message_input();
-    // if message less that 3 characters add white space up to that as needs to be a lests 3 bytes
-    // to post...will be overkill for non-ascii but no need to boil the ocean.
-    if message.len() < 3 {
-        let extra_blanks = 3 - message.len();
-        for _ in 0..extra_blanks {
-            message.push(' ');
-        }
-        message.push('.');
-    }
-    let payload = Bytes::from(message);
+    let payload = app.post_message_bytes();
     let no_of_recipients = app.split_recipients().len();
     app.set_cost_estimate(app.estimate_postage(payload, no_of_recipients).await?);
     app.change_state(AppState::Confirm);
-
     Ok(())
 }
 
@@ -235,17 +224,18 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
             app.set_error_text(&format!("Address created for: {cost} attos"));
         }
         AppState::PostPackage(PostPackageState::InputFundingWallet) => {
-            let recipients = app
+            let (recipients, _) = app
                 .check_recipients(
                     app.post_recipients_input()
                         .split(';')
                         .map(|r| r.trim())
                         .collect(),
                 )
-                .await;
-            let cost = app
-                .post_packages(recipients, app.post_message_input(), app.post_key_input())
                 .await?;
+            let (_, cost) = app
+                .post_packages(recipients, app.post_message_bytes(), app.post_key_input())
+                .await?;
+            app.set_error_text(&format!("Package(s) posted for: {cost} attos"));
         }
         _ => (),
     }

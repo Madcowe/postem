@@ -171,8 +171,21 @@ impl App {
         &self.post_recipients_input
     }
 
-    pub fn post_message_input(&self) -> Bytes {
-        Bytes::from(self.post_message_input.clone())
+    pub fn post_message_bytes(&self) -> Bytes {
+        // if message less that 3 characters add white space up to that as needs to be a lests 3 bytes
+        let mut message = self.post_message_input.clone();
+        if message.len() < 3 {
+            let extra_blanks = 3 - message.len();
+            for _ in 0..extra_blanks {
+                message.push(' ');
+            }
+            message.push('.');
+        }
+        Bytes::from(message)
+    }
+
+    pub fn post_message_input(&self) -> &str {
+        &self.post_message_input
     }
 
     pub fn post_key_input(&self) -> &str {
@@ -430,46 +443,45 @@ impl App {
         Ok((failed_recipients, cost))
     }
 
-    pub async fn carry_out_transaction(&mut self) -> Result<(), PostemError> {
-        match self.previous_state {
-            AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
-                let name = self.create_name_input();
-                let key = self.create_key_input();
-                match self.create_addressee(&name, &key).await {
-                    Ok(cost) => self
-                        .set_error_text(&format!("Succesfully created address for {} attos", cost)),
-                    Err(e) => self.set_error_text(&format!("{e}")),
-                }
-            }
-            AppState::PostPackage(PostPackageState::InputFundingWallet) => {
-                let (recipients, invalid_addresses) =
-                    self.check_recipients(self.split_recipients()).await?;
-                let message = self.post_message_input();
-                let payload = Bytes::from(message);
-                match self
-                    .post_packages(recipients, payload, &self.post_key_input)
-                    .await
-                {
-                    Ok((failed_addresses, cost)) => {
-                        let failed_addresses: Vec<String> =
-                            failed_addresses.iter().map(|a| a.name()).collect();
-                        let mut text = format!("Package sent for {} attos", cost);
-                        if !failed_addresses.is_empty() {
-                            text = text
-                                + &format!(
-                                    "\nHowever could nto send to the follwing addresses {}",
-                                    failed_addresses.join(", ")
-                                );
-                            self.set_error_text(&text);
-                        }
-                    }
-                    Err(e) => self.set_error_text(&format!("{e}")),
-                }
-            }
-            _ => (),
-        }
-        Ok(())
-    }
+    // pub async fn carry_out_transaction(&mut self) -> Result<(), PostemError> {
+    //     match self.previous_state {
+    //         AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
+    //             let name = self.create_name_input();
+    //             let key = self.create_key_input();
+    //             match self.create_addressee(&name, &key).await {
+    //                 Ok(cost) => self
+    //                     .set_error_text(&format!("Succesfully created address for {} attos", cost)),
+    //                 Err(e) => self.set_error_text(&format!("{e}")),
+    //             }
+    //         }
+    //         AppState::PostPackage(PostPackageState::InputFundingWallet) => {
+    //             let (recipients, invalid_addresses) =
+    //                 self.check_recipients(self.split_recipients()).await?;
+    //             let payload = self.post_message_bytes();
+    //             match self
+    //                 .post_packages(recipients, payload, &self.post_key_input)
+    //                 .await
+    //             {
+    //                 Ok((failed_addresses, cost)) => {
+    //                     let failed_addresses: Vec<String> =
+    //                         failed_addresses.iter().map(|a| a.name()).collect();
+    //                     let mut text = format!("Package sent for {} attos", cost);
+    //                     if !failed_addresses.is_empty() {
+    //                         text = text
+    //                             + &format!(
+    //                                 "\nHowever could not send to the follwing addresses {}",
+    //                                 failed_addresses.join(", ")
+    //                             );
+    //                         self.set_error_text(&text);
+    //                     }
+    //                 }
+    //                 Err(e) => self.set_error_text(&format!("{e}")),
+    //             }
+    //         }
+    //         _ => (),
+    //     }
+    //     Ok(())
+    // }
 }
 
 /// Returns a vector of the element in vector a that were not present in vector b

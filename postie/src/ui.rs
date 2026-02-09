@@ -245,16 +245,16 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                     key_block = key_block.clone().style(app.theme.inverted_text_style())
                 }
             };
-            let name_text =
+            let recipients_text =
                 Paragraph::new(app.post_recipients_input().clone()).block(recipients_block);
-            let url_name_text =
+            let message_text =
                 Paragraph::new(app.post_message_input().clone()).block(message_block);
             let key_text = Paragraph::new(app.post_key_input().clone()).block(key_block);
             let warning_text = Paragraph::new(warning)
                 .wrap(Wrap { trim: false })
                 .block(warning_block);
-            frame.render_widget(name_text, pop_up_chunks[0]);
-            frame.render_widget(url_name_text, pop_up_chunks[1]);
+            frame.render_widget(recipients_text, pop_up_chunks[0]);
+            frame.render_widget(message_text, pop_up_chunks[1]);
             frame.render_widget(warning_text, pop_up_chunks[2]);
             frame.render_widget(key_text, pop_up_chunks[3]);
         }
