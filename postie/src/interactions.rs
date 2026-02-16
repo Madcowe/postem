@@ -224,7 +224,7 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
             app.set_error_text(&format!("Address created for: {cost} attos"));
         }
         AppState::PostPackage(PostPackageState::InputFundingWallet) => {
-            let (recipients, _) = app
+            let (recipients, failed_recipients) = app
                 .check_recipients(
                     app.post_recipients_input()
                         .split(';')
@@ -232,10 +232,39 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
                         .collect(),
                 )
                 .await?;
-            let (_, cost) = app
-                .post_packages(recipients, app.post_message_bytes(), app.post_key_input())
+            let (failed_addresses, cost) = app
+                .post_packages(
+                    recipients.clone(),
+                    app.post_message_bytes(),
+                    app.post_key_input(),
+                )
                 .await?;
-            app.set_error_text(&format!("Package(s) posted for: {cost} attos"));
+            // app.status = format!(
+            //     "Recipients {:?}\\nFailed_recipients{:?}\nFailed_addrsses {:?}",
+            //     recipients, failed_recipients, failed_addresses
+            // );
+            let failed_addresses: Vec<String> = failed_addresses.iter().map(|a| a.name()).collect();
+            let mut text = if cost.is_zero() {
+                "Package(s) could not be sent.".to_string()
+            } else {
+                format!("Package sent for {} attos", cost)
+            };
+            if !failed_recipients.is_empty() {
+                text = text
+                    + &format!(
+                        "\nThese addresse(s) don't exist so could not be sent too:\n{}",
+                        failed_recipients.join("\n")
+                    );
+                app.set_error_text(&text);
+            }
+            if !failed_addresses.is_empty() {
+                text = text
+                    + &format!(
+                        "\nThe package could not send to the following addresses:\n{}",
+                        failed_addresses.join("\n")
+                    );
+            }
+            app.set_error_text(&text);
         }
         _ => (),
     }

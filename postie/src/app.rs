@@ -430,6 +430,7 @@ impl App {
         let mut cost = AttoTokens::zero();
         let mut failed_recipients = Vec::with_capacity(recipients.len());
         let payment_option = self.client.get_payment_option(private_key)?;
+        // this isn't returning failed recipients properly
         for recipient in recipients {
             match self
                 .client
@@ -657,5 +658,19 @@ mod tests {
             app.app_state,
             AppState::PostPackage(PostPackageState::InputRecipients),
         );
+    }
+
+    #[tokio::test]
+    pub async fn post_packages_to_invalid_addresses() {
+        let app = App::create(ConnectionType::Local).await.unwrap();
+        let private_key = SecretKey::random().to_hex();
+        let payload = Bytes::from("Hello");
+        let recipients = vec![PostemName::create("Nowhere").unwrap()];
+        let (failed_recipients, cost) = app
+            .post_packages(recipients.clone(), payload, &private_key)
+            .await
+            .unwrap();
+        assert_eq!(recipients, failed_recipients);
+        assert_eq!(cost, AttoTokens::zero());
     }
 }

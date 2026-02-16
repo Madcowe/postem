@@ -246,7 +246,7 @@ impl PostemClient {
 
 mod tests {
     use super::*;
-    use crate::addressee::PostemName;
+    use crate::addressee::{POSTEM_DERIVED_KEY_BASE, PostemName};
     use crate::client::ConnectionType;
     use autonomi::Bytes;
     use autonomi::self_encryption::MAX_CHUNK_SIZE;
@@ -294,12 +294,19 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let message = Bytes::from("Hello");
         let (package, _attos) = client
-            .package_post(postem_name, message, payment_option)
+            .package_post(postem_name, message.clone(), payment_option.clone())
             .await
             .unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let got_package = client.package_get(package.clone().address).await.unwrap();
         assert_eq!(got_package.0.seal(), package.seal());
+        // test posting to non existing address
+        let name = SecretKey::random().to_hex();
+        let postem_name = PostemName::create(&name).unwrap();
+        let post_result = client
+            .package_post(postem_name, message, payment_option)
+            .await;
+        assert!(post_result.is_err());
     }
 
     #[tokio::test]

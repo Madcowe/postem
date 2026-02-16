@@ -219,7 +219,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                     Constraint::Percentage(25),
                 ])
                 .split(pop_up_rect);
-            let mut recipients_block = Block::default().title("Name").style(app.theme.text_style());
+            let mut recipients_block = Block::default().title("To:").style(app.theme.text_style());
             let mut message_block = Block::default().title("Message text:");
             let mut key_block = Block::default()
                 .title("Private key of funding wallet")
@@ -228,16 +228,14 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             match post_package_state {
                 PostPackageState::InputRecipients => {
                     status_text =
-                        "Type to enter bored name, press (enter) to proceed or (esc) to go leave"
+                        "Type to enter recipients addresses, press (enter) to proceed or (esc) to go leave"
                             .to_string();
                     recipients_block = recipients_block
                         .clone()
                         .style(app.theme.inverted_text_style())
                 }
                 PostPackageState::InputMessage => {
-                    status_text =
-                        "Type to url name, press (enter) to proceed or (esc) to go leave. Leave blank to have random url"
-                            .to_string();
+                    status_text = "Type to enter message".to_string();
                     message_block = message_block.clone().style(app.theme.inverted_text_style())
                 }
                 PostPackageState::InputFundingWallet => {
