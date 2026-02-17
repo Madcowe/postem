@@ -371,10 +371,11 @@ impl App {
         }
     }
 
+    /// Splits by ; or , and trims results
     pub fn split_recipients(&self) -> Vec<&str> {
         self.post_recipients_input
-            .split(',')
-            // .map(|s| s.to_string())
+            .split(|c| c == ',' || c == ';')
+            .map(|r| r.trim())
             .collect()
     }
 

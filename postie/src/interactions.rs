@@ -14,7 +14,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-use autonomi::{Bytes, PaymentMode};
+use autonomi::{AttoTokens, Bytes, PaymentMode};
 use postem::PostemError;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::collections::HashMap;
@@ -108,10 +108,16 @@ impl Action {
                 )));
             }
             ToExecute::CompleteTransaction => {
-                return Ok(Some((
-                    Box::pin(complete_transaction(app)),
-                    "Uploading to antnet...".to_string(),
-                )));
+                let text = match app.previous_state() {
+                    AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
+                        "Attempting to create address...".to_string()
+                    }
+                    AppState::PostPackage(PostPackageState::InputFundingWallet) => {
+                        "Attempting to post pacakge(s)...".to_string()
+                    }
+                    _ => String::new(),
+                };
+                return Ok(Some((Box::pin(complete_transaction(app)), text)));
             }
         }
         Ok(None)
@@ -196,18 +202,17 @@ fn leave_text_input(app: &mut App) -> Result<(), PostemError> {
 // ------------------------------------------------------------------------------------------------
 
 async fn estimate_addressee(app: &mut App) -> Result<(), PostemError> {
+    app.set_cost_estimate(AttoTokens::zero());
     app.set_cost_estimate(
         app.check_addressee_available(&app.create_name_input())
             .await?,
     );
     app.change_state(AppState::Confirm);
-    while app.app_state() == AppState::Confirm {
-        tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
-    }
     Ok(())
 }
 
 async fn estimate_postage(app: &mut App) -> Result<(), PostemError> {
+    app.set_cost_estimate(AttoTokens::zero());
     let payload = app.post_message_bytes();
     let no_of_recipients = app.split_recipients().len();
     app.set_cost_estimate(app.estimate_postage(payload, no_of_recipients).await?);
@@ -224,14 +229,8 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
             app.set_error_text(&format!("Address created for: {cost} attos"));
         }
         AppState::PostPackage(PostPackageState::InputFundingWallet) => {
-            let (recipients, failed_recipients) = app
-                .check_recipients(
-                    app.post_recipients_input()
-                        .split(';')
-                        .map(|r| r.trim())
-                        .collect(),
-                )
-                .await?;
+            let (recipients, failed_recipients) =
+                app.check_recipients(app.split_recipients()).await?;
             let (failed_addresses, cost) = app
                 .post_packages(
                     recipients.clone(),
@@ -239,10 +238,6 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
                     app.post_key_input(),
                 )
                 .await?;
-            // app.status = format!(
-            //     "Recipients {:?}\\nFailed_recipients{:?}\nFailed_addrsses {:?}",
-            //     recipients, failed_recipients, failed_addresses
-            // );
             let failed_addresses: Vec<String> = failed_addresses.iter().map(|a| a.name()).collect();
             let mut text = if cost.is_zero() {
                 "Package(s) could not be sent.".to_string()
@@ -252,7 +247,7 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
             if !failed_recipients.is_empty() {
                 text = text
                     + &format!(
-                        "\nThese addresse(s) don't exist so could not be sent too:\n{}",
+                        "\nThe following addresse(s) don't exist so could not be sent to:\n{}",
                         failed_recipients.join("\n")
                     );
                 app.set_error_text(&text);
@@ -352,7 +347,7 @@ impl AppInteractions {
         // From AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet)
         let app_state = AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet);
         let mut actions = create_text_input_actions();
-        let action = Action::create(None, None, ToExecute::EstimatePostage);
+        let action = Action::create(None, None, ToExecute::EstimateNewAddress);
         let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
         actions.insert(input, action);
         interactions.insert(app_state, actions);
