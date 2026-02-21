@@ -16,13 +16,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 use autonomi::client::payment::PaymentOption;
 use autonomi::{AttoTokens, Bytes, SecretKey};
+use postem::door_mat;
 use postem::{
     Addressee, ConnectionType, DoorMat, Package, PostemClient, PostemError, addressee::PostemName,
 };
 use ratatui::crossterm::style::Stylize;
 
+use crate::accounts::{Account, Accounts};
 use crate::theme::Theme;
 use crate::ui::wait_pop_up;
+
+const ACCOUNTS_FILE_NAME: &str = "I_SHOULD_BE_ENCRYPTED.toml";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum AppState {
@@ -32,6 +36,7 @@ pub enum AppState {
     Confirm,
     Quit,
     CreateAddressee(CreateAddresseeState),
+    ChooseAddressee,
     PostPackage(PostPackageState),
     ViewDoormat,
     ViewPackage,
@@ -95,6 +100,9 @@ pub struct App {
     error_text: Option<String>,
     pub(crate) theme: Theme,
     door_mat: Option<DoorMat>,
+    door_mat_index: usize,
+    accounts: Accounts,
+    accounts_index: usize,
     char_input_buffer: Option<char>,
     post_recipients_input: String,
     post_message_input: String,
@@ -102,7 +110,6 @@ pub struct App {
     create_name_input: String,
     create_key_input: String,
     cost_estimate: AttoTokens,
-    // transaction_confirmed: bool,
 }
 impl App {
     pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
@@ -117,6 +124,9 @@ impl App {
             error_text: None,
             theme: Theme::surf_bored_synth_wave(),
             door_mat: None,
+            door_mat_index: 0,
+            accounts: Accounts::new(),
+            accounts_index: 0,
             char_input_buffer: None,
             post_recipients_input: String::new(),
             post_message_input: String::new(),
@@ -159,8 +169,16 @@ impl App {
         }
     }
 
-    pub fn has_doormat(&self) -> bool {
+    pub fn has_door_mat(&self) -> bool {
         self.door_mat.is_some()
+    }
+
+    pub fn door_mat_size(&self) -> usize {
+        if let Some(door_mat) = &self.door_mat {
+            door_mat.items().len()
+        } else {
+            0
+        }
     }
 
     pub fn menu_visible(&self) -> bool {
@@ -173,7 +191,12 @@ impl App {
 
     pub fn post_message_bytes(&self) -> Bytes {
         // if message less that 3 characters add white space up to that as needs to be a lests 3 bytes
-        let mut message = self.post_message_input.clone();
+        let mut message = if self.has_door_mat() {
+            self.door_mat.clone().unwrap().addressee().address().name()
+        } else {
+            "Anonymous".to_string()
+        } + "\n"
+            + &self.post_message_input.clone();
         if message.len() < 3 {
             let extra_blanks = 3 - message.len();
             for _ in 0..extra_blanks {
@@ -316,6 +339,21 @@ impl App {
         }
     }
 
+    pub fn next_item(&mut self) {
+        match self.app_state {
+            AppState::ChooseAddressee => {}
+            AppState::ViewDoormat => {
+                let total = self.door_mat_size();
+                if total > 0 && self.accounts_index < total {
+                    self.accounts_index += 1
+                } else if total > 0 && self.accounts_index >= total {
+                    self.accounts_index = 0
+                }
+            }
+            _ => (),
+        }
+    }
+
     /// If available returns estimated cost.
     pub async fn check_addressee_available(&self, name: &str) -> Result<AttoTokens, PostemError> {
         self.client
@@ -340,23 +378,36 @@ impl App {
                 .doormat_init(addressee.secret_key(), name)
                 .await?,
         );
+        self.accounts.add(addressee.clone().into());
+        if !self.save_accounts() {
+            let text = format!(
+                "Failed to save addressee details to file, copy the following if you want to keep:\nName: {}\nSecret Key: {}",
+                addressee.address().name(),
+                addressee.secret_key().to_hex(),
+            );
+            self.set_error_text(&text);
+        }
         self.change_state(AppState::None); // change to view dormat when implemented
         self.create_name_input = String::new();
         Ok(cost)
     }
 
-    pub async fn import_addressee(
+    pub async fn switch_addressee(
         &mut self,
-        name: &str,
-        private_key: &str,
+        account: Account,
+        // name: &str,
+        // private_key: &str,
     ) -> Result<(), PostemError> {
         let addressee = self
             .client
-            .addressee_get(SecretKey::from_hex(private_key)?, PostemName::create(name)?)
+            .addressee_get(
+                SecretKey::from_hex(&account.secret_key)?,
+                PostemName::create(&account.name)?,
+            )
             .await?;
         self.door_mat = Some(
             self.client
-                .doormat_init(addressee.secret_key(), name)
+                .doormat_init(addressee.secret_key(), &account.name)
                 .await?,
         );
         Ok(())
@@ -445,45 +496,25 @@ impl App {
         Ok((failed_recipients, cost))
     }
 
-    // pub async fn carry_out_transaction(&mut self) -> Result<(), PostemError> {
-    //     match self.previous_state {
-    //         AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
-    //             let name = self.create_name_input();
-    //             let key = self.create_key_input();
-    //             match self.create_addressee(&name, &key).await {
-    //                 Ok(cost) => self
-    //                     .set_error_text(&format!("Succesfully created address for {} attos", cost)),
-    //                 Err(e) => self.set_error_text(&format!("{e}")),
-    //             }
-    //         }
-    //         AppState::PostPackage(PostPackageState::InputFundingWallet) => {
-    //             let (recipients, invalid_addresses) =
-    //                 self.check_recipients(self.split_recipients()).await?;
-    //             let payload = self.post_message_bytes();
-    //             match self
-    //                 .post_packages(recipients, payload, &self.post_key_input)
-    //                 .await
-    //             {
-    //                 Ok((failed_addresses, cost)) => {
-    //                     let failed_addresses: Vec<String> =
-    //                         failed_addresses.iter().map(|a| a.name()).collect();
-    //                     let mut text = format!("Package sent for {} attos", cost);
-    //                     if !failed_addresses.is_empty() {
-    //                         text = text
-    //                             + &format!(
-    //                                 "\nHowever could not send to the follwing addresses {}",
-    //                                 failed_addresses.join(", ")
-    //                             );
-    //                         self.set_error_text(&text);
-    //                     }
-    //                 }
-    //                 Err(e) => self.set_error_text(&format!("{e}")),
-    //             }
-    //         }
-    //         _ => (),
-    //     }
-    //     Ok(())
-    // }
+    /// Returns true if succesfully loaded
+    pub fn load_accounts(&mut self) -> bool {
+        match Accounts::load_file(ACCOUNTS_FILE_NAME) {
+            Some(accounts) => {
+                self.accounts = accounts;
+                return true;
+            }
+            None => return false,
+        }
+    }
+
+    /// Returns true is succesfully saved
+    pub fn save_accounts(&self) -> bool {
+        self.accounts.save_file(ACCOUNTS_FILE_NAME)
+    }
+
+    pub fn accounts_size(&self) -> usize {
+        self.accounts.size()
+    }
 }
 
 /// Returns a vector of the element in vector a that were not present in vector b
@@ -525,6 +556,7 @@ pub fn invalid_recipients<'a>(names: Vec<&'a str>, valid_names: Vec<&'a str>) ->
 
 mod tests {
 
+    use crate::accounts::Account;
     use crate::app::invalid_recipients;
 
     use super::*;
@@ -597,10 +629,10 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let mut packages = Vec::with_capacity(recipients.len());
         for recipient in recipients {
-            app.import_addressee(
-                &recipient.address().name(),
-                &recipient.secret_key().to_hex(),
-            )
+            app.switch_addressee(Account {
+                name: recipient.address().name(),
+                secret_key: recipient.secret_key().to_hex(),
+            })
             .await
             .unwrap();
             packages.append(&mut app.door_mat.clone().unwrap().items());

@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2025 Postem
+Copyright (C) 2025-2026 Postem
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
@@ -37,6 +37,7 @@ use crate::{
     ui::{ui, wait_pop_up},
 };
 
+mod accounts;
 mod app;
 mod interactions;
 mod theme;
@@ -54,6 +55,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //     }
     // }
     let mut app = App::create(connection_type).await?;
+    // Tries to load accounts if file doesn't exist...or other error nothing happens and accounts will be empty
+    app.load_accounts();
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();

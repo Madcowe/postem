@@ -187,7 +187,7 @@ fn toggle_sub_state_backwards(app: &mut App) -> Result<(), PostemError> {
 }
 
 fn leave_text_input(app: &mut App) -> Result<(), PostemError> {
-    if app.has_doormat() {
+    if app.has_door_mat() {
         app.change_state(AppState::ViewDoormat);
     } else {
         app.change_state(AppState::None);
@@ -242,7 +242,7 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
             let mut text = if cost.is_zero() {
                 "Package(s) could not be sent.".to_string()
             } else {
-                format!("Package sent for {} attos", cost)
+                format!("Package(s) sent for {} attos", cost)
             };
             if !failed_recipients.is_empty() {
                 text = text
@@ -455,7 +455,7 @@ fn create_text_input_actions() -> HashMap<InputType, Action> {
         ToExecute::SyncFunction(toggle_sub_state_backwards),
     );
     // Does shift need to be spefified with BackTab??? needs testing in app
-    let input = InputType::create_key_press(KeyCode::BackTab, KeyModifiers::empty());
+    let input = InputType::create_key_press(KeyCode::BackTab, KeyModifiers::SHIFT);
     actions.insert(input, action);
     actions
 }
