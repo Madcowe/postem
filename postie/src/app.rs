@@ -341,17 +341,76 @@ impl App {
 
     pub fn next_item(&mut self) {
         match self.app_state {
-            AppState::ChooseAddressee => {}
-            AppState::ViewDoormat => {
-                let total = self.door_mat_size();
+            AppState::ChooseAddressee => {
+                let total = self.accounts.size();
                 if total > 0 && self.accounts_index < total {
                     self.accounts_index += 1
                 } else if total > 0 && self.accounts_index >= total {
                     self.accounts_index = 0
                 }
             }
+            AppState::ViewDoormat => {
+                let total = self.door_mat_size();
+                if total > 0 && self.door_mat_index < total {
+                    self.door_mat_index += 1
+                } else if total > 0 && self.door_mat_index >= total {
+                    self.door_mat_index = 0
+                }
+            }
             _ => (),
         }
+    }
+
+    pub fn previous_item(&mut self) {
+        match self.app_state {
+            AppState::ChooseAddressee => {
+                let total = self.accounts.size();
+                if total > 0 && self.accounts_index > 0 {
+                    self.accounts_index -= 1
+                } else if total > 0 && self.accounts_index == 0 {
+                    self.accounts_index = total
+                }
+            }
+            AppState::ViewDoormat => {
+                let total = self.door_mat_size();
+                if total > 0 && self.door_mat_index > 0 {
+                    self.door_mat_index -= 1
+                } else if total > 0 && self.door_mat_index == 0 {
+                    self.door_mat_index = 0
+                }
+            }
+            _ => (),
+        }
+    }
+
+    pub async fn select_item(&mut self) -> Result<(), PostemError> {
+        match self.app_state {
+            AppState::ChooseAddressee => {
+                if let Some(account) = self.accounts.get_account(self.accounts_index) {
+                    self.switch_addressee(account).await?;
+                    self.change_state(AppState::ViewDoormat);
+                }
+            }
+            AppState::ViewDoormat => {
+                if self.door_mat_size() > 0 && self.door_mat_index < self.door_mat_size() {
+                    self.change_state(AppState::ViewPackage);
+                }
+            }
+            _ => (),
+        }
+        Ok(())
+    }
+
+    pub fn get_selected_item(&self) -> usize {
+        match self.app_state() {
+            AppState::ChooseAddressee => self.accounts_index,
+            AppState::ViewDoormat => self.door_mat_index,
+            _ => 0,
+        }
+    }
+
+    pub fn get_accounts_table(&self) -> Vec<String> {
+        self.accounts.as_table()
     }
 
     /// If available returns estimated cost.
@@ -373,13 +432,16 @@ impl App {
             .addressee_create(name, self.client.get_payment_option(private_key)?, None)
             .await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        self.accounts.add(addressee.clone().into());
         self.door_mat = Some(
             self.client
                 .doormat_init(addressee.secret_key(), name)
                 .await?,
         );
-        self.accounts.add(addressee.clone().into());
-        if !self.save_accounts() {
+        let saved = self.save_accounts();
+        self.status = format!("Saved: {:?}, accounts: {:?}", saved, self.accounts);
+        if saved == false {
+            // this will get immeditaly covered by another message so nedd to pass up
             let text = format!(
                 "Failed to save addressee details to file, copy the following if you want to keep:\nName: {}\nSecret Key: {}",
                 addressee.address().name(),

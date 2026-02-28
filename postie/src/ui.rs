@@ -17,7 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 use postem::PostemError;
 use ratatui::buffer::Buffer;
 use ratatui::style::Stylize;
-use ratatui::widgets::Widget;
+use ratatui::widgets::{Row, Table, TableState, Widget};
 use ratatui::{
     Frame, Terminal,
     backend::{Backend, CrosstermBackend},
@@ -256,35 +256,34 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             frame.render_widget(warning_text, pop_up_chunks[2]);
             frame.render_widget(key_text, pop_up_chunks[3]);
         }
-        // View::DirectoryView(directory_index) => {
-        //     let mut table_state = TableState::default().with_selected(*directory_index);
-        //     let header = ["Bored name", "Home"]
-        //         .into_iter()
-        //         .map(Span::from)
-        //         .collect::<Row>()
-        //         .style(app.theme.text_style())
-        //         .bold()
-        //         .height(1);
-        //     let directory_table = app.directory.as_table();
-        //     let rows: Vec<Row> = directory_table
-        //         .iter()
-        //         .map(|r| Row::new(vec![r[0].clone(), r[1].clone()]).style(app.theme.text_style()))
-        //         .collect();
-        //     let pop_up_rect = area.inner(Margin::new(area.width / 8, area.height / 4));
-        //     let pop_up_block = Block::default()
-        //         .title("Diretory of boreds")
-        //         .style(app.theme.text_style())
-        //         .borders(Borders::ALL)
-        //         .border_type(BorderType::Thick);
-        //     let table = Table::new(rows, [Constraint::Fill(1), Constraint::Length(6)])
-        //         .header(header)
-        //         .row_highlight_style(app.theme.inverted_text_style())
-        //         .block(pop_up_block);
-        //     status_text =
-        //         "Press up and down to select, (enter) to confirm selection, (ctrl + h) to set as home bored and (esc) to cancel"
-        //             .to_string();
-        //     Clear.render(pop_up_rect, frame.buffer_mut());
-        //     frame.render_stateful_widget(table, pop_up_rect, &mut table_state);
+        AppState::ChooseAddressee => {
+            let mut table_state = TableState::default().with_selected(app.get_selected_item());
+            let header = ["Addressee name"]
+                .into_iter()
+                .map(Span::from)
+                .collect::<Row>()
+                .style(app.theme.text_style())
+                .bold()
+                .height(1);
+            let directory_table = app.get_accounts_table();
+            let rows: Vec<Row> = directory_table
+                .iter()
+                // .map(|r| Row::new(vec![r[0].clone(), r[1].clone()]).style(app.theme.text_style()))c
+                .map(|r| Row::new(vec![r.clone()]).style(app.theme.text_style()))
+                .collect();
+            let pop_up_rect = area.inner(Margin::new(area.width / 8, area.height / 4));
+            let pop_up_block = Block::default()
+                .title("Addressee accounts:")
+                .style(app.theme.text_style())
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick);
+            let table = Table::new(rows, [Constraint::Fill(1), Constraint::Length(6)])
+                .header(header)
+                .row_highlight_style(app.theme.inverted_text_style())
+                .block(pop_up_block);
+            Clear.render(pop_up_rect, frame.buffer_mut());
+            frame.render_stateful_widget(table, pop_up_rect, &mut table_state);
+        }
         _ => (),
     }
     // setup status area

@@ -19,7 +19,10 @@ use postem::PostemError;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::collections::HashMap;
 use std::pin::Pin;
-use tokio::time::{Duration, sleep};
+use tokio::{
+    io::AsyncBufRead,
+    time::{Duration, sleep},
+};
 
 use crate::app::{App, AppState, CreateAddresseeState, PostPackageState};
 
@@ -59,6 +62,7 @@ pub enum ToExecute {
     EstimateNewAddress,
     EstimatePostage,
     CompleteTransaction,
+    SelectItem,
 }
 
 #[derive(Clone, Debug)]
@@ -113,11 +117,21 @@ impl Action {
                         "Attempting to create address...".to_string()
                     }
                     AppState::PostPackage(PostPackageState::InputFundingWallet) => {
-                        "Attempting to post pacakge(s)...".to_string()
+                        "Attempting to post package(s)...".to_string()
                     }
                     _ => String::new(),
                 };
                 return Ok(Some((Box::pin(complete_transaction(app)), text)));
+            }
+            ToExecute::SelectItem => {
+                let text = match app.app_state() {
+                    AppState::ChooseAddressee => {
+                        "Switching to address and downloading packages...".to_string()
+                    }
+                    AppState::ViewDoormat => "Opening package...".to_string(),
+                    _ => String::new(),
+                };
+                return Ok(Some((Box::pin(select_item(app)), text)));
             }
         }
         Ok(None)
@@ -135,6 +149,11 @@ fn about(app: &mut App) -> Result<(), PostemError> {
 
 fn quit(app: &mut App) -> Result<(), PostemError> {
     app.change_state(AppState::Quit);
+    Ok(())
+}
+
+fn choose_addressee(app: &mut App) -> Result<(), PostemError> {
+    app.change_state(AppState::ChooseAddressee);
     Ok(())
 }
 
@@ -192,6 +211,21 @@ fn leave_text_input(app: &mut App) -> Result<(), PostemError> {
     } else {
         app.change_state(AppState::None);
     }
+    Ok(())
+}
+
+fn next_item(app: &mut App) -> Result<(), PostemError> {
+    app.next_item();
+    Ok(())
+}
+
+fn previous_item(app: &mut App) -> Result<(), PostemError> {
+    app.previous_item();
+    Ok(())
+}
+
+fn toggle_menu(app: &mut App) -> Result<(), PostemError> {
+    app.toggle_menu();
     Ok(())
 }
 
@@ -263,7 +297,11 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
         }
         _ => (),
     }
-    // }
+    Ok(())
+}
+
+async fn select_item(app: &mut App) -> Result<(), PostemError> {
+    app.select_item().await?;
     Ok(())
 }
 
@@ -374,6 +412,18 @@ impl AppInteractions {
         actions.insert(input, action);
         interactions.insert(app_state, actions);
 
+        // From AppState::ChooseAddressee;
+        let app_state = AppState::ChooseAddressee;
+        let mut actions = create_select_actions();
+        let input = InputType::create_key_press(KeyCode::Esc, KeyModifiers::empty());
+        let action = Action::create(None, None, ToExecute::SyncFunction(leave_text_input));
+        actions.insert(input, action);
+        interactions.insert(app_state, actions);
+        // From AppState::ViewDoormat;
+        let app_state = AppState::ViewDoormat;
+        let mut actions = create_select_actions();
+        interactions.insert(app_state, actions);
+
         AppInteractions { interactions }
     }
 
@@ -417,6 +467,9 @@ impl AppInteractions {
 
 fn create_standard_actions() -> HashMap<InputType, Action> {
     let mut actions = HashMap::new();
+    let input = InputType::create_key_press(KeyCode::Char(' '), KeyModifiers::empty());
+    let action = Action::create(None, None, ToExecute::SyncFunction(toggle_menu));
+    actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
     let action = Action::create(None, None, ToExecute::SyncFunction(quit));
     actions.insert(input, action);
@@ -425,6 +478,13 @@ fn create_standard_actions() -> HashMap<InputType, Action> {
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Char('a'), KeyModifiers::empty());
     let action = Action::create(Some("A About"), None, ToExecute::SyncFunction(post_package));
+    actions.insert(input, action);
+    let input = InputType::create_key_press(KeyCode::Char('s'), KeyModifiers::empty());
+    let action = Action::create(
+        Some("S Switch account"),
+        None,
+        ToExecute::SyncFunction(choose_addressee),
+    );
     actions.insert(input, action);
     actions
 }
@@ -456,6 +516,31 @@ fn create_text_input_actions() -> HashMap<InputType, Action> {
     );
     // Does shift need to be spefified with BackTab??? needs testing in app
     let input = InputType::create_key_press(KeyCode::BackTab, KeyModifiers::SHIFT);
+    actions.insert(input, action);
+    actions
+}
+
+fn create_select_actions() -> HashMap<InputType, Action> {
+    let mut actions = HashMap::new();
+    let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
+    let action = Action::create(None, None, ToExecute::SyncFunction(quit));
+    actions.insert(input, action);
+    let input = InputType::create_key_press(KeyCode::Up, KeyModifiers::empty());
+    let action = Action::create(
+        None,
+        Some("Press (up) to select previous item"),
+        ToExecute::SyncFunction(previous_item),
+    );
+    actions.insert(input, action);
+    let input = InputType::create_key_press(KeyCode::Down, KeyModifiers::empty());
+    let action = Action::create(
+        None,
+        Some("(down) to select the next item"),
+        ToExecute::SyncFunction(next_item),
+    );
+    actions.insert(input, action);
+    let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+    let action = Action::create(None, Some("(enter) to pick item"), ToExecute::SelectItem);
     actions.insert(input, action);
     actions
 }

@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 use crate::App;
 use postem::{Addressee, addressee::PostemName};
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::{fs, ops::Index};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Account {
@@ -35,10 +35,12 @@ impl From<Addressee> for Account {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Accounts(Vec<Account>);
+pub struct Accounts {
+    pub accounts: Vec<Account>,
+}
 impl Accounts {
     pub fn new() -> Accounts {
-        Accounts(vec![])
+        Accounts { accounts: vec![] }
     }
 
     pub fn load_file(path: &str) -> Option<Accounts> {
@@ -66,18 +68,41 @@ impl Accounts {
     }
 
     pub fn add(&mut self, account: Account) {
-        self.0.push(account);
+        self.accounts.push(account);
     }
 
     pub fn size(&self) -> usize {
-        self.0.len()
+        self.accounts.len()
+    }
+
+    pub fn get_account(&self, index: usize) -> Option<Account> {
+        self.accounts.get(index).cloned()
     }
 
     pub fn as_table(&self) -> Vec<String> {
         let mut v = vec![];
-        for account in self.0.iter() {
+        for account in self.accounts.iter() {
             v.push(account.name.clone())
         }
         v
+    }
+}
+
+#[cfg(test)]
+
+mod tests {
+
+    use super::*;
+
+    #[test]
+    pub fn test_accounts_add() {
+        let path = "test.toml";
+        let mut accounts = Accounts::new();
+        let account = Account {
+            name: "Test".to_string(),
+            secret_key: "TEST".to_string(),
+        };
+        accounts.add(account);
+        assert!(accounts.save_file(path));
     }
 }
