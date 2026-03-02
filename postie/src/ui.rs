@@ -57,8 +57,14 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
         .border_type(BorderType::QuadrantOutside)
         .style(app.theme.header_style())
         .bold();
-    let mut url_style = app.theme.header_style();
-    let title_text = Text::raw("Postie");
+    let account_text = if let Some(name) = &app.name_of_door_mat() {
+        format!("Account: {name}")
+    } else {
+        "".to_string()
+    };
+    let app_span = Span::styled("Postie", app.theme.header_style());
+    let account_span = Span::styled(account_text, app.theme.header_style());
+    let title_text = Text::from_iter(vec![app_span, account_span]);
     let title = Paragraph::new(title_text).block(title_block);
     frame.render_widget(title, ui_chunks[0]);
 
@@ -268,7 +274,6 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             let directory_table = app.get_accounts_table();
             let rows: Vec<Row> = directory_table
                 .iter()
-                // .map(|r| Row::new(vec![r[0].clone(), r[1].clone()]).style(app.theme.text_style()))c
                 .map(|r| Row::new(vec![r.clone()]).style(app.theme.text_style()))
                 .collect();
             let pop_up_rect = area.inner(Margin::new(area.width / 8, area.height / 4));
@@ -278,6 +283,33 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                 .borders(Borders::ALL)
                 .border_type(BorderType::Thick);
             let table = Table::new(rows, [Constraint::Fill(1), Constraint::Length(6)])
+                .header(header)
+                .row_highlight_style(app.theme.inverted_text_style())
+                .block(pop_up_block);
+            Clear.render(pop_up_rect, frame.buffer_mut());
+            frame.render_stateful_widget(table, pop_up_rect, &mut table_state);
+        }
+        AppState::ViewDoormat => {
+            let mut table_state = TableState::default().with_selected(app.get_selected_item());
+            let header = ["From", "Message"]
+                .into_iter()
+                .map(Span::from)
+                .collect::<Row>()
+                .style(app.theme.text_style())
+                .bold()
+                .height(1);
+            let items_table = app.door_mat_as_table();
+            let rows: Vec<Row> = items_table
+                .iter()
+                .map(|r| Row::new(vec![r[0].clone(), r[1].clone()]).style(app.theme.text_style()))
+                .collect();
+            let pop_up_rect = ui_chunks[1];
+            let pop_up_block = Block::default()
+                .title("Addressee accounts:")
+                .style(app.theme.text_style())
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick);
+            let table = Table::new(rows, [Constraint::Length(20), Constraint::Fill(1)])
                 .header(header)
                 .row_highlight_style(app.theme.inverted_text_style())
                 .block(pop_up_block);

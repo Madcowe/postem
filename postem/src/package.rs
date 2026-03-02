@@ -69,6 +69,12 @@ impl Package {
         self.payload.clone()
     }
 
+    pub fn payload_as_string(&self) -> Option<String> {
+        self.payload
+            .clone()
+            .map(|p| String::from_utf8(p.to_vec()).unwrap_or(String::new()))
+    }
+
     pub fn set_payload(&mut self, payload: Bytes) {
         self.payload = Some(payload);
     }

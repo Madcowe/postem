@@ -181,6 +181,30 @@ impl App {
         }
     }
 
+    pub fn name_of_door_mat(&self) -> Option<String> {
+        self.door_mat
+            .clone()
+            .map(|d| d.addressee().address().name().clone())
+    }
+
+    pub fn door_mat_as_table(&self) -> Vec<[String; 2]> {
+        if !self.has_door_mat() {
+            return vec![];
+        }
+        let mut v = vec![];
+        for item in self.door_mat.clone().unwrap().items() {
+            if let Some(text) = item.payload_as_string() {
+                let lines: Vec<&str> = text.lines().collect();
+                if lines.len() >= 2 {
+                    v.push([lines[0].to_string(), lines[1].to_string()])
+                } else if lines.len() == 1 {
+                    v.push(["".to_string(), lines[0].to_string()])
+                }
+            }
+        }
+        v
+    }
+
     pub fn menu_visible(&self) -> bool {
         self.menu_visible
     }
@@ -343,17 +367,17 @@ impl App {
         match self.app_state {
             AppState::ChooseAddressee => {
                 let total = self.accounts.size();
-                if total > 0 && self.accounts_index < total {
+                if total > 0 && self.accounts_index < total - 1 {
                     self.accounts_index += 1
-                } else if total > 0 && self.accounts_index >= total {
+                } else if total > 0 && self.accounts_index >= total - 1 {
                     self.accounts_index = 0
                 }
             }
             AppState::ViewDoormat => {
                 let total = self.door_mat_size();
-                if total > 0 && self.door_mat_index < total {
+                if total > 0 && self.door_mat_index < total - 1 {
                     self.door_mat_index += 1
-                } else if total > 0 && self.door_mat_index >= total {
+                } else if total > 0 && self.door_mat_index >= total - 1 {
                     self.door_mat_index = 0
                 }
             }
@@ -368,7 +392,7 @@ impl App {
                 if total > 0 && self.accounts_index > 0 {
                     self.accounts_index -= 1
                 } else if total > 0 && self.accounts_index == 0 {
-                    self.accounts_index = total
+                    self.accounts_index = total - 1
                 }
             }
             AppState::ViewDoormat => {
@@ -376,7 +400,7 @@ impl App {
                 if total > 0 && self.door_mat_index > 0 {
                     self.door_mat_index -= 1
                 } else if total > 0 && self.door_mat_index == 0 {
-                    self.door_mat_index = 0
+                    self.door_mat_index = total - 1
                 }
             }
             _ => (),
@@ -559,10 +583,20 @@ impl App {
     }
 
     /// Returns true if succesfully loaded
-    pub fn load_accounts(&mut self) -> bool {
+    pub async fn load_accounts(&mut self) -> bool {
         match Accounts::load_file(ACCOUNTS_FILE_NAME) {
             Some(accounts) => {
                 self.accounts = accounts;
+                if self.accounts.size() > 0 {
+                    self.change_state(AppState::ChooseAddressee);
+                    // match self
+                    //     .switch_addressee(self.accounts.get_account(0).unwrap())
+                    //     .await
+                    // {
+                    //     Ok(_) => return true,
+                    //     Err(_) => return false,
+                    // }
+                }
                 return true;
             }
             None => return false,

@@ -419,9 +419,39 @@ impl AppInteractions {
         let action = Action::create(None, None, ToExecute::SyncFunction(leave_text_input));
         actions.insert(input, action);
         interactions.insert(app_state, actions);
+
         // From AppState::ViewDoormat;
         let app_state = AppState::ViewDoormat;
         let mut actions = create_select_actions();
+        let input = InputType::create_key_press(KeyCode::Char(' '), KeyModifiers::empty());
+        let action = Action::create(None, None, ToExecute::SyncFunction(toggle_menu));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('q'), KeyModifiers::empty());
+        let action = Action::create(Some("Q Quit"), None, ToExecute::SyncFunction(quit));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('a'), KeyModifiers::empty());
+        let action = Action::create(Some("A About"), None, ToExecute::SyncFunction(post_package));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('s'), KeyModifiers::empty());
+        let action = Action::create(
+            Some("S Switch account"),
+            None,
+            ToExecute::SyncFunction(choose_addressee),
+        );
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('p'), KeyModifiers::empty());
+        let action = Action::create(
+            Some("P Post package"),
+            Some("Press p to post a package"),
+            ToExecute::SyncFunction(post_package),
+        );
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::empty());
+        let action = Action::create(
+            Some("C Create address"),
+            Some("Press c to create an address"),
+            ToExecute::SyncFunction(create_addressee),
+        );
         interactions.insert(app_state, actions);
 
         AppInteractions { interactions }

@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // }
     let mut app = App::create(connection_type).await?;
     // Tries to load accounts if file doesn't exist...or other error nothing happens and accounts will be empty
-    app.load_accounts();
+    app.load_accounts().await;
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
