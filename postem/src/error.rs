@@ -26,7 +26,7 @@ use blsttc::SecretKey;
 pub enum PostemError {
     #[error("Could nor initiate autonomi client")]
     ClientConnectionError,
-    #[error("Reqested name is blank. Note full stops are not counted as delimnate domains")]
+    #[error("Requested name is blank. Note full stops are not counted as deliminate domains")]
     BlankName,
     #[error("Requested name contains the following invalid character: {0}")]
     NameContainsInvalidCharatcers(char),

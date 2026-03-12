@@ -58,13 +58,20 @@ impl CreateAddresseeState {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PostPackageState {
+    InputFundingWallet,
     InputRecipients,
     InputMessage,
-    InputFundingWallet,
 }
 impl PostPackageState {
     pub fn toggle(&self, fowards: bool) -> PostPackageState {
         match self {
+            PostPackageState::InputFundingWallet => {
+                if fowards {
+                    PostPackageState::InputRecipients
+                } else {
+                    PostPackageState::InputMessage
+                }
+            }
             PostPackageState::InputRecipients => {
                 if fowards {
                     PostPackageState::InputMessage
@@ -77,13 +84,6 @@ impl PostPackageState {
                     PostPackageState::InputFundingWallet
                 } else {
                     PostPackageState::InputRecipients
-                }
-            }
-            PostPackageState::InputFundingWallet => {
-                if fowards {
-                    PostPackageState::InputRecipients
-                } else {
-                    PostPackageState::InputMessage
                 }
             }
         }
@@ -110,6 +110,7 @@ pub struct App {
     create_name_input: String,
     create_key_input: String,
     cost_estimate: AttoTokens,
+    vertical_scroll: u16,
 }
 impl App {
     pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
@@ -134,7 +135,7 @@ impl App {
             create_name_input: String::new(),
             create_key_input: String::new(),
             cost_estimate: AttoTokens::zero(),
-            // transaction_confirmed: false,
+            vertical_scroll: 0,
         })
     }
 
@@ -142,6 +143,9 @@ impl App {
         match self.app_state {
             AppState::Error | AppState::Confirm => (),
             _ => self.previous_state = self.app_state,
+        }
+        if self.app_state == AppState::ViewPackage {
+            self.vertical_scroll_reset();
         }
         self.app_state = app_state;
     }
@@ -205,6 +209,40 @@ impl App {
         v
     }
 
+    pub fn get_current_package(&mut self) -> Option<String> {
+        if self.app_state == AppState::ViewPackage && self.has_door_mat() {
+            self.status = format!(
+                "get_current_package: State: {:?} has doormat: {}",
+                self.app_state,
+                self.has_door_mat()
+            );
+            if let Some(item) = self
+                .door_mat
+                .clone()
+                .unwrap()
+                .items()
+                .get(self.get_selected_item())
+            {
+                item.payload_as_string()
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn display_message(&mut self) -> (String, String) {
+        let message = self.get_current_package().clone().unwrap_or(String::new());
+        let mut lines: Vec<&str> = message.lines().collect();
+        // let (sender, message) =
+        if lines.len() >= 1 {
+            (lines.remove(0).to_string(), lines.join("\n").to_string())
+        } else {
+            (String::new(), String::new())
+        }
+    }
+
     pub fn menu_visible(&self) -> bool {
         self.menu_visible
     }
@@ -260,7 +298,7 @@ impl App {
                         self.cost_estimate
                     ))
                 }
-                AppState::PostPackage(PostPackageState::InputFundingWallet) => Some(format!(
+                AppState::PostPackage(PostPackageState::InputMessage) => Some(format!(
                     "Estimate cost of posting package(s): {} attos.",
                     self.cost_estimate
                 )),
@@ -304,60 +342,71 @@ impl App {
         if let Some(char) = self.char_input_buffer {
             match self.app_state {
                 AppState::PostPackage(PostPackageState::InputRecipients) => {
-                    self.post_recipients_input.push(char)
+                    self.post_recipients_input.push(char);
                 }
                 AppState::PostPackage(PostPackageState::InputMessage) => {
-                    self.post_message_input.push(char)
+                    self.post_message_input.push(char);
                 }
                 AppState::PostPackage(PostPackageState::InputFundingWallet) => {
-                    self.post_key_input.push(char)
+                    self.post_key_input.push(char);
                 }
                 AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName) => {
-                    self.create_name_input.push(char)
+                    self.create_name_input.push(char);
                 }
                 AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
-                    self.create_key_input.push(char)
+                    self.create_key_input.push(char);
                 }
                 _ => (),
             }
         }
     }
 
+    pub fn message_new_line(&mut self) {
+        match self.app_state {
+            AppState::PostPackage(PostPackageState::InputMessage) => {
+                self.post_message_input += "\n";
+            }
+            _ => (),
+        }
+    }
+
     pub fn text_delete(&mut self) {
         match self.app_state {
             AppState::PostPackage(PostPackageState::InputRecipients) => {
-                self.post_recipients_input.pop()
+                self.post_recipients_input.pop();
             }
-            AppState::PostPackage(PostPackageState::InputMessage) => self.post_message_input.pop(),
+            AppState::PostPackage(PostPackageState::InputMessage) => {
+                self.post_message_input.pop();
+            }
             AppState::PostPackage(PostPackageState::InputFundingWallet) => {
-                self.post_key_input.pop()
+                self.post_key_input.pop();
             }
             AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName) => {
-                self.create_name_input.pop()
+                self.create_name_input.pop();
             }
             AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
-                self.create_key_input.pop()
+                self.create_key_input.pop();
             }
-            _ => None,
+            _ => (),
         };
     }
 
     pub fn text_clear(&mut self) {
         match self.app_state {
             AppState::PostPackage(PostPackageState::InputRecipients) => {
-                self.post_recipients_input = String::new()
+                self.post_recipients_input = String::new();
             }
             AppState::PostPackage(PostPackageState::InputMessage) => {
-                self.post_message_input = String::new()
+                self.post_message_input = String::new();
             }
             AppState::PostPackage(PostPackageState::InputFundingWallet) => {
-                self.post_key_input = String::new()
+                self.post_key_input = String::new();
             }
             AppState::CreateAddressee(CreateAddresseeState::InputAddresseeName) => {
-                self.create_name_input = String::new()
+                self.create_name_input = String::new();
             }
             AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
-                self.create_key_input = String::new()
+                self.create_key_input = String::new();
             }
             _ => (),
         }
@@ -428,7 +477,7 @@ impl App {
     pub fn get_selected_item(&self) -> usize {
         match self.app_state() {
             AppState::ChooseAddressee => self.accounts_index,
-            AppState::ViewDoormat => self.door_mat_index,
+            AppState::ViewDoormat | AppState::ViewPackage => self.door_mat_index,
             _ => 0,
         }
     }
@@ -610,6 +659,26 @@ impl App {
 
     pub fn accounts_size(&self) -> usize {
         self.accounts.size()
+    }
+
+    pub fn vertical_scroll(&self) -> u16 {
+        self.vertical_scroll
+    }
+
+    pub fn vertical_scroll_reset(&mut self) {
+        self.vertical_scroll = 0;
+    }
+
+    pub fn scroll_down(&mut self) {
+        if self.vertical_scroll < std::u16::MAX {
+            self.vertical_scroll += 1;
+        }
+    }
+
+    pub fn scroll_up(&mut self) {
+        if self.vertical_scroll > 0 {
+            self.vertical_scroll -= 1;
+        }
     }
 }
 

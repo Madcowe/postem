@@ -36,7 +36,8 @@ use crate::theme::Theme;
 
 pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
     let area = frame.area();
-    let mut status_text = String::new();
+    let mut status_text = interactions.get_help_items(app.app_state()).join(", ");
+    app.status = format!("{:?}", app.app_state());
     let mut menu_options = interactions.get_menu_items(app.app_state());
     let ui_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -220,9 +221,9 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                 .margin(1)
                 .constraints([
                     Constraint::Percentage(25),
-                    Constraint::Percentage(25),
-                    Constraint::Percentage(25),
-                    Constraint::Percentage(25),
+                    Constraint::Length(2),
+                    Constraint::Length(2),
+                    Constraint::Percentage(75),
                 ])
                 .split(pop_up_rect);
             let mut recipients_block = Block::default().title("To:").style(app.theme.text_style());
@@ -249,18 +250,34 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                     key_block = key_block.clone().style(app.theme.inverted_text_style())
                 }
             };
-            let recipients_text =
-                Paragraph::new(app.post_recipients_input().clone()).block(recipients_block);
-            let message_text =
-                Paragraph::new(app.post_message_input().clone()).block(message_block);
-            let key_text = Paragraph::new(app.post_key_input().clone()).block(key_block);
+            let recipients_text = Paragraph::new(app.post_recipients_input())
+                .block(recipients_block)
+                .wrap(Wrap { trim: true });
+            let message = app.post_message_input();
+            // This is scrolling up much later than needed
+            let message_rows = message.len() / (pop_up_chunks[1].width as usize - 2);
+            let message_rows = if message_rows > std::u16::MAX as usize {
+                std::u16::MAX
+            } else {
+                message_rows as u16
+            };
+            let scroll = if message_rows > pop_up_chunks[1].height {
+                message_rows - pop_up_chunks[1].height
+            } else {
+                0
+            };
+            let message_text = Paragraph::new(message)
+                .block(message_block)
+                .wrap(Wrap { trim: true })
+                .scroll((scroll, 0));
+            let key_text = Paragraph::new(app.post_key_input()).block(key_block);
             let warning_text = Paragraph::new(warning)
                 .wrap(Wrap { trim: false })
                 .block(warning_block);
-            frame.render_widget(recipients_text, pop_up_chunks[0]);
-            frame.render_widget(message_text, pop_up_chunks[1]);
-            frame.render_widget(warning_text, pop_up_chunks[2]);
-            frame.render_widget(key_text, pop_up_chunks[3]);
+            frame.render_widget(warning_text, pop_up_chunks[0]);
+            frame.render_widget(key_text, pop_up_chunks[1]);
+            frame.render_widget(recipients_text, pop_up_chunks[2]);
+            frame.render_widget(message_text, pop_up_chunks[3]);
         }
         AppState::ChooseAddressee => {
             let mut table_state = TableState::default().with_selected(app.get_selected_item());
@@ -289,7 +306,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             Clear.render(pop_up_rect, frame.buffer_mut());
             frame.render_stateful_widget(table, pop_up_rect, &mut table_state);
         }
-        AppState::ViewDoormat => {
+        AppState::ViewDoormat | AppState::ViewPackage => {
             let mut table_state = TableState::default().with_selected(app.get_selected_item());
             let header = ["From", "Message"]
                 .into_iter()
@@ -315,6 +332,25 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                 .block(pop_up_block);
             Clear.render(pop_up_rect, frame.buffer_mut());
             frame.render_stateful_widget(table, pop_up_rect, &mut table_state);
+            if app.app_state() == AppState::ViewPackage {
+                // AppState::ViewPackage => {
+                let pop_up_rect = area.inner(Margin::new(area.width / 8, area.height / 5));
+                let (sender, message) = app.display_message();
+                let pop_up_block = Block::default()
+                    .title("From: ".to_owned() + &sender + " ")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Thick)
+                    .style(app.theme.text_style());
+                // app.status = message.clone();
+                // frame.render_widget(pop_up_block, pop_up_rect);
+                let message_text = Paragraph::new(Text::styled(message, Style::default()))
+                    .wrap(Wrap { trim: false })
+                    .scroll((app.vertical_scroll(), 0))
+                    .block(pop_up_block)
+                    .wrap(Wrap { trim: false });
+                Clear.render(pop_up_rect, frame.buffer_mut());
+                frame.render_widget(message_text, pop_up_rect);
+            }
         }
         _ => (),
     }

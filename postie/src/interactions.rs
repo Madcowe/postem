@@ -63,6 +63,7 @@ pub enum ToExecute {
     EstimatePostage,
     CompleteTransaction,
     SelectItem,
+    Refresh,
 }
 
 #[derive(Clone, Debug)]
@@ -116,7 +117,7 @@ impl Action {
                     AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
                         "Attempting to create address...".to_string()
                     }
-                    AppState::PostPackage(PostPackageState::InputFundingWallet) => {
+                    AppState::PostPackage(PostPackageState::InputMessage) => {
                         "Attempting to post package(s)...".to_string()
                     }
                     _ => String::new(),
@@ -132,6 +133,12 @@ impl Action {
                     _ => String::new(),
                 };
                 return Ok(Some((Box::pin(select_item(app)), text)));
+            }
+            ToExecute::Refresh => {
+                return Ok(Some((
+                    Box::pin(referesh_door_mat(app)),
+                    "Checking for new packages...".to_string(),
+                )));
             }
         }
         Ok(None)
@@ -169,7 +176,7 @@ fn close_confirm_pop_up(app: &mut App) -> Result<(), PostemError> {
 }
 
 fn post_package(app: &mut App) -> Result<(), PostemError> {
-    app.change_state(AppState::PostPackage(PostPackageState::InputRecipients));
+    app.change_state(AppState::PostPackage(PostPackageState::InputFundingWallet));
     Ok(())
 }
 
@@ -192,6 +199,11 @@ fn text_delete(app: &mut App) -> Result<(), PostemError> {
 
 fn text_clear(app: &mut App) -> Result<(), PostemError> {
     app.text_clear();
+    Ok(())
+}
+
+fn message_new_line(app: &mut App) -> Result<(), PostemError> {
+    app.message_new_line();
     Ok(())
 }
 
@@ -229,6 +241,21 @@ fn toggle_menu(app: &mut App) -> Result<(), PostemError> {
     Ok(())
 }
 
+fn scroll_down(app: &mut App) -> Result<(), PostemError> {
+    app.scroll_down();
+    Ok(())
+}
+
+fn scroll_up(app: &mut App) -> Result<(), PostemError> {
+    app.scroll_up();
+    Ok(())
+}
+
+fn leave_view_package(app: &mut App) -> Result<(), PostemError> {
+    app.change_state(AppState::ViewDoormat);
+    Ok(())
+}
+
 // ------------------------------------------------------------------------------------------------
 
 // ------------------------------------------------------------------------------------------------
@@ -262,7 +289,7 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
                 .await?;
             app.set_error_text(&format!("Address created for: {cost} attos"));
         }
-        AppState::PostPackage(PostPackageState::InputFundingWallet) => {
+        AppState::PostPackage(PostPackageState::InputMessage) => {
             let (recipients, failed_recipients) =
                 app.check_recipients(app.split_recipients()).await?;
             let (failed_addresses, cost) = app
@@ -302,6 +329,11 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
 
 async fn select_item(app: &mut App) -> Result<(), PostemError> {
     app.select_item().await?;
+    Ok(())
+}
+
+async fn referesh_door_mat(app: &mut App) -> Result<(), PostemError> {
+    app.update_doormat().await?;
     Ok(())
 }
 
@@ -390,6 +422,13 @@ impl AppInteractions {
         actions.insert(input, action);
         interactions.insert(app_state, actions);
 
+        // From AppState::PostPackage(PostPackageState::InputFundingWallet)
+        let app_state = AppState::PostPackage(PostPackageState::InputFundingWallet);
+        let mut actions = create_text_input_actions();
+        // let action = Action::create(None, None, ToExecute::EstimatePostage);
+        // let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+        // actions.insert(input, action);
+        interactions.insert(app_state, actions);
         // From AppState::PostPackage(PostPackageState::InputRecipients)
         let app_state = AppState::PostPackage(PostPackageState::InputRecipients);
         let mut actions = create_text_input_actions();
@@ -399,16 +438,31 @@ impl AppInteractions {
         interactions.insert(app_state, actions);
         // From AppState::PostPackage(PostPackageState::InputMessage)
         let app_state = AppState::PostPackage(PostPackageState::InputMessage);
-        let mut actions = create_text_input_actions();
-        let action = Action::create(None, None, ToExecute::SyncFunction(toggle_sub_state));
+        let mut actions = HashMap::new();
+        let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        let action = Action::create(None, None, ToExecute::SyncFunction(quit));
+        actions.insert(input, action);
+        let input = InputType::TextInput;
+        let action = Action::create(None, None, ToExecute::SyncFunction(text_input));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Backspace, KeyModifiers::empty());
+        let action = Action::create(None, None, ToExecute::SyncFunction(text_delete));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('u'), KeyModifiers::CONTROL);
+        let action = Action::create(None, None, ToExecute::SyncFunction(text_clear));
+        actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
-        actions.insert(input, action.clone());
-        interactions.insert(app_state, actions);
-        // From AppState::PostPackage(PostPackageState::InputFundingWallet)
-        let app_state = AppState::PostPackage(PostPackageState::InputFundingWallet);
-        let mut actions = create_text_input_actions();
-        let action = Action::create(None, None, ToExecute::EstimatePostage);
-        let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+        let action = Action::create(None, None, ToExecute::SyncFunction(message_new_line));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Esc, KeyModifiers::empty());
+        let action = Action::create(
+            None,
+            None,
+            ToExecute::SyncFunction(toggle_sub_state_backwards),
+        );
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        let action = Action::create(None, Some("(ctrl + s) to send"), ToExecute::EstimatePostage);
         actions.insert(input, action);
         interactions.insert(app_state, actions);
 
@@ -424,13 +478,23 @@ impl AppInteractions {
         let app_state = AppState::ViewDoormat;
         let mut actions = create_select_actions();
         let input = InputType::create_key_press(KeyCode::Char(' '), KeyModifiers::empty());
-        let action = Action::create(None, None, ToExecute::SyncFunction(toggle_menu));
+        let action = Action::create(
+            None,
+            Some("Press space for menu"),
+            ToExecute::SyncFunction(toggle_menu),
+        );
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('q'), KeyModifiers::empty());
-        let action = Action::create(Some("Q Quit"), None, ToExecute::SyncFunction(quit));
+        let action = Action::create(Some("q Quit"), None, ToExecute::SyncFunction(quit));
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('a'), KeyModifiers::empty());
-        let action = Action::create(Some("A About"), None, ToExecute::SyncFunction(post_package));
+        let action = Action::create(Some("a About"), None, ToExecute::SyncFunction(post_package));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('r'), KeyModifiers::empty());
+        let action = Action::create(Some("r Refresh"), None, ToExecute::Refresh);
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::F(5), KeyModifiers::empty());
+        let action = Action::create(None, None, ToExecute::Refresh);
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('s'), KeyModifiers::empty());
         let action = Action::create(
@@ -452,6 +516,14 @@ impl AppInteractions {
             Some("Press c to create an address"),
             ToExecute::SyncFunction(create_addressee),
         );
+        interactions.insert(app_state, actions);
+
+        // From AppState::ViewPackage
+        let app_state = AppState::ViewPackage;
+        let mut actions = create_standard_actions();
+        let input = InputType::create_key_press(KeyCode::Esc, KeyModifiers::empty());
+        let action = Action::create(None, None, ToExecute::SyncFunction(leave_view_package));
+        actions.insert(input, action);
         interactions.insert(app_state, actions);
 
         AppInteractions { interactions }
@@ -498,7 +570,11 @@ impl AppInteractions {
 fn create_standard_actions() -> HashMap<InputType, Action> {
     let mut actions = HashMap::new();
     let input = InputType::create_key_press(KeyCode::Char(' '), KeyModifiers::empty());
-    let action = Action::create(None, None, ToExecute::SyncFunction(toggle_menu));
+    let action = Action::create(
+        None,
+        Some("Press space for menu"),
+        ToExecute::SyncFunction(toggle_menu),
+    );
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
     let action = Action::create(None, None, ToExecute::SyncFunction(quit));
