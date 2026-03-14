@@ -524,6 +524,12 @@ impl AppInteractions {
         let input = InputType::create_key_press(KeyCode::Esc, KeyModifiers::empty());
         let action = Action::create(None, None, ToExecute::SyncFunction(leave_view_package));
         actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Up, KeyModifiers::empty());
+        let action = Action::create(None, None, ToExecute::SyncFunction(scroll_up));
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Down, KeyModifiers::empty());
+        let action = Action::create(None, None, ToExecute::SyncFunction(scroll_down));
+        actions.insert(input, action);
         interactions.insert(app_state, actions);
 
         AppInteractions { interactions }

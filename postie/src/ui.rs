@@ -254,18 +254,16 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                 .block(recipients_block)
                 .wrap(Wrap { trim: true });
             let message = app.post_message_input();
-            // This is scrolling up much later than needed
-            let message_rows = message.len() / (pop_up_chunks[1].width as usize - 2);
-            let message_rows = if message_rows > std::u16::MAX as usize {
-                std::u16::MAX
-            } else {
-                message_rows as u16
-            };
-            let scroll = if message_rows > pop_up_chunks[1].height {
-                message_rows - pop_up_chunks[1].height
+            let message_rows = count_lines(message, pop_up_chunks[3].width - 2);
+            let scroll = if message_rows > (pop_up_chunks[3].height - 2) {
+                message_rows - (pop_up_chunks[3].height - 2)
             } else {
                 0
             };
+            status_text = format!(
+                "message_rows: {message_rows} scroll: {scroll} box {:?}",
+                pop_up_chunks[3]
+            );
             let message_text = Paragraph::new(message)
                 .block(message_block)
                 .wrap(Wrap { trim: true })
@@ -343,9 +341,14 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                     .style(app.theme.text_style());
                 // app.status = message.clone();
                 // frame.render_widget(pop_up_block, pop_up_rect);
+                let vertical_scroll = if app.vertical_scroll() < pop_up_rect.height - 1 {
+                    app.vertical_scroll()
+                } else {
+                    0
+                };
                 let message_text = Paragraph::new(Text::styled(message, Style::default()))
                     .wrap(Wrap { trim: false })
-                    .scroll((app.vertical_scroll(), 0))
+                    .scroll((vertical_scroll, 0))
                     .block(pop_up_block)
                     .wrap(Wrap { trim: false });
                 Clear.render(pop_up_rect, frame.buffer_mut());
@@ -383,6 +386,23 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
         Clear.render(menu_rect, frame.buffer_mut());
         frame.render_widget(menu, menu_rect);
     }
+}
+
+fn count_lines(text: &str, width: u16) -> u16 {
+    let width = width as usize;
+    let mut lines = 1u16;
+
+    for line in text.lines() {
+        if line.is_empty() {
+            lines += 1;
+        } else {
+            // Calculate how many lines this paragraph takes when wrapped
+            let wrapped_lines = (line.len() + width - 1) / width; // Ceiling division
+            lines += wrapped_lines as u16;
+        }
+    }
+
+    lines
 }
 
 /// Returns 0 if subraction overflow
