@@ -111,6 +111,7 @@ pub struct App {
     create_key_input: String,
     cost_estimate: AttoTokens,
     vertical_scroll: u16,
+    vertical_scroll_max: u16,
 }
 impl App {
     pub async fn create(connection_type: ConnectionType) -> Result<App, PostemError> {
@@ -136,6 +137,7 @@ impl App {
             create_key_input: String::new(),
             cost_estimate: AttoTokens::zero(),
             vertical_scroll: 0,
+            vertical_scroll_max: 0,
         })
     }
 
@@ -669,8 +671,16 @@ impl App {
         self.vertical_scroll = 0;
     }
 
+    pub fn vertical_scroll_max(&self) -> u16 {
+        self.vertical_scroll_max
+    }
+
+    pub fn set_vertical_scroll_max(&mut self, max: u16) {
+        self.vertical_scroll_max = max;
+    }
+
     pub fn scroll_down(&mut self) {
-        if self.vertical_scroll < std::u16::MAX {
+        if self.vertical_scroll < self.vertical_scroll_max {
             self.vertical_scroll += 1;
         }
     }

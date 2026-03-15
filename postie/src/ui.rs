@@ -331,7 +331,6 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             Clear.render(pop_up_rect, frame.buffer_mut());
             frame.render_stateful_widget(table, pop_up_rect, &mut table_state);
             if app.app_state() == AppState::ViewPackage {
-                // AppState::ViewPackage => {
                 let pop_up_rect = area.inner(Margin::new(area.width / 8, area.height / 5));
                 let (sender, message) = app.display_message();
                 let pop_up_block = Block::default()
@@ -339,18 +338,24 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                     .borders(Borders::ALL)
                     .border_type(BorderType::Thick)
                     .style(app.theme.text_style());
-                // app.status = message.clone();
-                // frame.render_widget(pop_up_block, pop_up_rect);
-                let vertical_scroll = if app.vertical_scroll() < pop_up_rect.height - 1 {
-                    app.vertical_scroll()
-                } else {
-                    0
-                };
-                let message_text = Paragraph::new(Text::styled(message, Style::default()))
+
+                let message_text = Paragraph::new(Text::styled(message.clone(), Style::default()))
                     .wrap(Wrap { trim: false })
-                    .scroll((vertical_scroll, 0))
-                    .block(pop_up_block)
-                    .wrap(Wrap { trim: false });
+                    .block(pop_up_block);
+
+                // Calculate the content height needed to display all text
+                let content_height = count_lines(&message, pop_up_rect.width - 2);
+                let available_height = pop_up_rect.height.saturating_sub(2); // Subtract borders
+
+                // Calculate max scroll: only scroll as much as needed to show the last line
+                let max_scroll = content_height.saturating_sub(available_height);
+                app.set_vertical_scroll_max(max_scroll);
+
+                // Clamp scroll value between 0 and max_scroll
+                let vertical_scroll = app.vertical_scroll().min(max_scroll);
+
+                let message_text = message_text.scroll((vertical_scroll, 0));
+
                 Clear.render(pop_up_rect, frame.buffer_mut());
                 frame.render_widget(message_text, pop_up_rect);
             }
