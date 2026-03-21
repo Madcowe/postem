@@ -256,6 +256,16 @@ fn leave_view_package(app: &mut App) -> Result<(), PostemError> {
     Ok(())
 }
 
+fn open_license_url(app: &mut App) -> Result<(), PostemError> {
+    app.open_clearnet_url("https://www.gnu.org/licenses/");
+    Ok(())
+}
+
+fn open_source_code_url(app: &mut App) -> Result<(), PostemError> {
+    app.open_clearnet_url("https://github.com/Madcowe/postem/tree/main/postie");
+    Ok(())
+}
+
 // ------------------------------------------------------------------------------------------------
 
 // ------------------------------------------------------------------------------------------------
@@ -333,6 +343,7 @@ async fn select_item(app: &mut App) -> Result<(), PostemError> {
 }
 
 async fn referesh_door_mat(app: &mut App) -> Result<(), PostemError> {
+    app.toggle_menu();
     app.update_doormat().await?;
     Ok(())
 }
@@ -350,16 +361,49 @@ impl AppInteractions {
         let mut actions = create_standard_actions();
         let input = InputType::create_key_press(KeyCode::Char('p'), KeyModifiers::empty());
         let action = Action::create(
-            Some("P Post package"),
+            Some("p Post package"),
             Some("Press p to post a package"),
             ToExecute::SyncFunction(post_package),
         );
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::empty());
         let action = Action::create(
-            Some("C Create address"),
+            Some("c Create address"),
             Some("Press c to create an address"),
             ToExecute::SyncFunction(create_addressee),
+        );
+        actions.insert(input, action);
+        interactions.insert(app_state, actions);
+
+        // From AppState::About
+        let app_state = AppState::About;
+        let mut actions = create_standard_actions();
+        let input = InputType::create_key_press(KeyCode::Char('p'), KeyModifiers::empty());
+        let action = Action::create(
+            Some("p Post package"),
+            Some("Press p to post a package"),
+            ToExecute::SyncFunction(post_package),
+        );
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::empty());
+        let action = Action::create(
+            Some("c Create address"),
+            Some("Press c to create an address"),
+            ToExecute::SyncFunction(create_addressee),
+        );
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('l'), KeyModifiers::empty());
+        let action = Action::create(
+            Some("l View license"),
+            Some("Press l to view license"),
+            ToExecute::SyncFunction(open_license_url),
+        );
+        actions.insert(input, action);
+        let input = InputType::create_key_press(KeyCode::Char('v'), KeyModifiers::empty());
+        let action = Action::create(
+            Some("v Source cide"),
+            Some("Press v to view source code"),
+            ToExecute::SyncFunction(open_source_code_url),
         );
         actions.insert(input, action);
         interactions.insert(app_state, actions);
@@ -488,7 +532,7 @@ impl AppInteractions {
         let action = Action::create(Some("q Quit"), None, ToExecute::SyncFunction(quit));
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('a'), KeyModifiers::empty());
-        let action = Action::create(Some("a About"), None, ToExecute::SyncFunction(post_package));
+        let action = Action::create(Some("a About"), None, ToExecute::SyncFunction(about));
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('r'), KeyModifiers::empty());
         let action = Action::create(Some("r Refresh"), None, ToExecute::Refresh);
@@ -498,24 +542,25 @@ impl AppInteractions {
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('s'), KeyModifiers::empty());
         let action = Action::create(
-            Some("S Switch account"),
+            Some("s Switch account"),
             None,
             ToExecute::SyncFunction(choose_addressee),
         );
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('p'), KeyModifiers::empty());
         let action = Action::create(
-            Some("P Post package"),
+            Some("p Post package"),
             Some("Press p to post a package"),
             ToExecute::SyncFunction(post_package),
         );
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::empty());
         let action = Action::create(
-            Some("C Create address"),
+            Some("c Create address"),
             Some("Press c to create an address"),
             ToExecute::SyncFunction(create_addressee),
         );
+        actions.insert(input, action);
         interactions.insert(app_state, actions);
 
         // From AppState::ViewPackage
@@ -586,14 +631,14 @@ fn create_standard_actions() -> HashMap<InputType, Action> {
     let action = Action::create(None, None, ToExecute::SyncFunction(quit));
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Char('q'), KeyModifiers::empty());
-    let action = Action::create(Some("Q Quit"), None, ToExecute::SyncFunction(quit));
+    let action = Action::create(Some("q Quit"), None, ToExecute::SyncFunction(quit));
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Char('a'), KeyModifiers::empty());
-    let action = Action::create(Some("A About"), None, ToExecute::SyncFunction(post_package));
+    let action = Action::create(Some("a About"), None, ToExecute::SyncFunction(about));
     actions.insert(input, action);
     let input = InputType::create_key_press(KeyCode::Char('s'), KeyModifiers::empty());
     let action = Action::create(
-        Some("S Switch account"),
+        Some("s Switch account"),
         None,
         ToExecute::SyncFunction(choose_addressee),
     );

@@ -10,3 +10,4 @@ postem = { path = "../postem"}
 autonomi = "0.7.1"
 serde = "1.0.228"
 toml = "1.0.3"
+open = "5.3.3"

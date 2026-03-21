@@ -39,6 +39,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
     let mut status_text = interactions.get_help_items(app.app_state()).join(", ");
     app.status = format!("{:?}", app.app_state());
     let mut menu_options = interactions.get_menu_items(app.app_state());
+    menu_options.sort();
     let ui_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -132,9 +133,8 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             }
         }
         AppState::None => {
-            // status_text = "Press p to post a package, or c to create a new address".to_string();
             let pop_up_rect = area.inner(Margin::new(area.width / 4, area.height / 4));
-            let navigation_text = interactions.get_menu_items(app.app_state()).join(", ");
+            let navigation_text = "";
             Clear.render(pop_up_rect, frame.buffer_mut());
             let pop_up_block = Block::default()
                 .borders(Borders::ALL)
@@ -155,9 +155,35 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             ))
             .wrap(Wrap { trim: false });
             frame.render_widget(pop_up_text, pop_up_chunks[0]);
-            let navigation_text =
-                Paragraph::new(Text::styled(navigation_text, Style::default()).not_rapid_blink())
-                    .alignment(Alignment::Center);
+            let navigation_text = Paragraph::new(Text::styled(navigation_text, Style::default()))
+                .alignment(Alignment::Center);
+            frame.render_widget(navigation_text, pop_up_chunks[1]);
+        }
+        AppState::About => {
+            let pop_up_rect = area.inner(Margin::new(area.width / 4, area.height / 4));
+            let navigation_text = "";
+            Clear.render(pop_up_rect, frame.buffer_mut());
+            let pop_up_block = Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
+                .style(app.theme.text_style());
+            frame.render_widget(pop_up_block, pop_up_rect);
+            let pop_up_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .margin(1)
+                .constraints([
+                    Constraint::Percentage(100),
+                    Constraint::Min(navigation_text.lines().count() as u16),
+                ])
+                .split(pop_up_rect);
+            let pop_up_text = Paragraph::new(Text::styled(
+                "License: GNU Affero General Public License\nVersion 3 or later\n\nPress l to view license press v to view source code".to_string(),
+                Style::default(),
+            ))
+            .wrap(Wrap { trim: false });
+            frame.render_widget(pop_up_text, pop_up_chunks[0]);
+            let navigation_text = Paragraph::new(Text::styled(navigation_text, Style::default()))
+                .alignment(Alignment::Center);
             frame.render_widget(navigation_text, pop_up_chunks[1]);
         }
         AppState::CreateAddressee(create_address_state) => {
@@ -193,7 +219,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                     name_block = name_block.clone().style(app.theme.inverted_text_style())
                 }
                 CreateAddresseeState::InputFundingWallet => {
-                    status_text = "Type to enter key or use terminal emulator paste (enter) to proceed, (tab) to edit name or (esc) to leave".to_string();
+                    status_text = "Type to enter key or use terminal emulator paste, press (enter) to proceed or (esc) to leave".to_string();
                     key_block = key_block.clone().style(app.theme.inverted_text_style())
                 }
             };
@@ -235,18 +261,19 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             match post_package_state {
                 PostPackageState::InputRecipients => {
                     status_text =
-                        "Type to enter recipients addresses, press (enter) to proceed or (esc) to go leave"
+                        "Type to enter recipients addresses, press (tab) to proceed or (esc) to go leave"
                             .to_string();
                     recipients_block = recipients_block
                         .clone()
                         .style(app.theme.inverted_text_style())
                 }
                 PostPackageState::InputMessage => {
-                    status_text = "Type to enter message".to_string();
+                    status_text =
+                        "Type to enter message and then (ctrl + s) to send message, press (esc) to go back".to_string();
                     message_block = message_block.clone().style(app.theme.inverted_text_style())
                 }
                 PostPackageState::InputFundingWallet => {
-                    status_text = "Type to enter key or use terminal emulator paste (enter) to proceed, (tab) to edit name or (esc) to leave".to_string();
+                    status_text = "Type to enter key or use terminal emulator paste, (tab) to enter recipients or (esc) to leave".to_string();
                     key_block = key_block.clone().style(app.theme.inverted_text_style())
                 }
             };
@@ -260,10 +287,6 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             } else {
                 0
             };
-            status_text = format!(
-                "message_rows: {message_rows} scroll: {scroll} box {:?}",
-                pop_up_chunks[3]
-            );
             let message_text = Paragraph::new(message)
                 .block(message_block)
                 .wrap(Wrap { trim: true })

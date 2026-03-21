@@ -142,12 +142,14 @@ impl App {
     }
 
     pub fn change_state(&mut self, app_state: AppState) {
+        self.menu_visible = false;
         match self.app_state {
             AppState::Error | AppState::Confirm => (),
             _ => self.previous_state = self.app_state,
         }
-        if self.app_state == AppState::ViewPackage {
-            self.vertical_scroll_reset();
+        match self.app_state {
+            AppState::ViewPackage => self.vertical_scroll_reset(),
+            _ => (),
         }
         self.app_state = app_state;
     }
@@ -689,6 +691,12 @@ impl App {
         if self.vertical_scroll > 0 {
             self.vertical_scroll -= 1;
         }
+    }
+
+    pub fn open_clearnet_url(&mut self, url: &str) {
+        if let Err(_) = open::that(url) {
+            self.set_error_text(&format!("Could not open old fashion webpage: {url}"));
+        };
     }
 }
 
