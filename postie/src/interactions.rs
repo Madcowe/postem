@@ -117,9 +117,7 @@ impl Action {
                     AppState::CreateAddressee(CreateAddresseeState::InputFundingWallet) => {
                         "Attempting to create address...".to_string()
                     }
-                    AppState::PostPackage(PostPackageState::InputMessage) => {
-                        "Attempting to post package(s)...".to_string()
-                    }
+                    AppState::PostPackage(_) => "Attempting to post package(s)...".to_string(),
                     _ => String::new(),
                 };
                 return Ok(Some((Box::pin(complete_transaction(app)), text)));
@@ -299,7 +297,7 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
                 .await?;
             app.set_error_text(&format!("Address created for: {cost} attos"));
         }
-        AppState::PostPackage(PostPackageState::InputMessage) => {
+        AppState::PostPackage(_) => {
             let (recipients, failed_recipients) =
                 app.check_recipients(app.split_recipients()).await?;
             let (failed_addresses, cost) = app
@@ -469,9 +467,12 @@ impl AppInteractions {
         // From AppState::PostPackage(PostPackageState::InputFundingWallet)
         let app_state = AppState::PostPackage(PostPackageState::InputFundingWallet);
         let mut actions = create_text_input_actions();
-        // let action = Action::create(None, None, ToExecute::EstimatePostage);
-        // let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
-        // actions.insert(input, action);
+        let action = Action::create(None, None, ToExecute::SyncFunction(toggle_sub_state));
+        let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
+        actions.insert(input, action.clone());
+        let input = InputType::create_key_press(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        let action = Action::create(None, Some("(ctrl + s) to send"), ToExecute::EstimatePostage);
+        actions.insert(input, action);
         interactions.insert(app_state, actions);
         // From AppState::PostPackage(PostPackageState::InputRecipients)
         let app_state = AppState::PostPackage(PostPackageState::InputRecipients);
@@ -479,31 +480,15 @@ impl AppInteractions {
         let action = Action::create(None, None, ToExecute::SyncFunction(toggle_sub_state));
         let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
         actions.insert(input, action.clone());
+        let input = InputType::create_key_press(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        let action = Action::create(None, Some("(ctrl + s) to send"), ToExecute::EstimatePostage);
+        actions.insert(input, action);
         interactions.insert(app_state, actions);
         // From AppState::PostPackage(PostPackageState::InputMessage)
         let app_state = AppState::PostPackage(PostPackageState::InputMessage);
-        let mut actions = HashMap::new();
-        let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::CONTROL);
-        let action = Action::create(None, None, ToExecute::SyncFunction(quit));
-        actions.insert(input, action);
-        let input = InputType::TextInput;
-        let action = Action::create(None, None, ToExecute::SyncFunction(text_input));
-        actions.insert(input, action);
-        let input = InputType::create_key_press(KeyCode::Backspace, KeyModifiers::empty());
-        let action = Action::create(None, None, ToExecute::SyncFunction(text_delete));
-        actions.insert(input, action);
-        let input = InputType::create_key_press(KeyCode::Char('u'), KeyModifiers::CONTROL);
-        let action = Action::create(None, None, ToExecute::SyncFunction(text_clear));
-        actions.insert(input, action);
+        let mut actions = create_text_input_actions();
         let input = InputType::create_key_press(KeyCode::Enter, KeyModifiers::empty());
         let action = Action::create(None, None, ToExecute::SyncFunction(message_new_line));
-        actions.insert(input, action);
-        let input = InputType::create_key_press(KeyCode::Esc, KeyModifiers::empty());
-        let action = Action::create(
-            None,
-            None,
-            ToExecute::SyncFunction(toggle_sub_state_backwards),
-        );
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('s'), KeyModifiers::CONTROL);
         let action = Action::create(None, Some("(ctrl + s) to send"), ToExecute::EstimatePostage);
@@ -671,7 +656,6 @@ fn create_text_input_actions() -> HashMap<InputType, Action> {
         None,
         ToExecute::SyncFunction(toggle_sub_state_backwards),
     );
-    // Does shift need to be spefified with BackTab??? needs testing in app
     let input = InputType::create_key_press(KeyCode::BackTab, KeyModifiers::SHIFT);
     actions.insert(input, action);
     actions

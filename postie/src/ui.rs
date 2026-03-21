@@ -39,6 +39,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
     let mut status_text = interactions.get_help_items(app.app_state()).join(", ");
     app.status = format!("{:?}", app.app_state());
     let mut menu_options = interactions.get_menu_items(app.app_state());
+    let help_items = interactions.get_help_items(app.app_state());
     menu_options.sort();
     let ui_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -392,8 +393,9 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
         .style(app.theme.header_style())
         .bold();
     // let status_rect = Rect::new(0, area.height - 5, area.width, 5);
-    status_text = format!("{:?}\n{}", app.status, status_text);
-    let status = Paragraph::new(Text::styled(status_text, Style::default()))
+    // status_text = format!("{:?}\n{}", app.status, status_text);
+    let help_text = help_items.join(", ");
+    let status = Paragraph::new(Text::styled(help_text, Style::default()))
         .wrap(Wrap { trim: false })
         .block(status_block);
     frame.render_widget(status, ui_chunks[2]);

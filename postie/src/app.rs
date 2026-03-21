@@ -302,7 +302,7 @@ impl App {
                         self.cost_estimate
                     ))
                 }
-                AppState::PostPackage(PostPackageState::InputMessage) => Some(format!(
+                AppState::PostPackage(_) => Some(format!(
                     "Estimate cost of posting package(s): {} attos.",
                     self.cost_estimate
                 )),
