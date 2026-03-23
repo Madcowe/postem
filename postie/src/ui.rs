@@ -39,7 +39,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
     let mut status_text = interactions.get_help_items(app.app_state()).join(", ");
     app.status = format!("{:?}", app.app_state());
     let mut menu_options = interactions.get_menu_items(app.app_state());
-    let help_items = interactions.get_help_items(app.app_state());
+    // let help_items = interactions.get_help_items(app.app_state());
     menu_options.sort();
     let ui_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -215,12 +215,12 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             match create_address_state {
                 CreateAddresseeState::InputAddresseeName => {
                     status_text =
-                        "Type to enter addressee name, press (enter) to proceed or (esc) to go leave"
+                        "Type to enter addressee name, press (tab) to proceed or (esc) to go leave"
                             .to_string();
                     name_block = name_block.clone().style(app.theme.inverted_text_style())
                 }
                 CreateAddresseeState::InputFundingWallet => {
-                    status_text = "Type to enter key or use terminal emulator paste, press (enter) to proceed or (esc) to leave".to_string();
+                    status_text = "Type to enter key or use terminal emulator paste, press (tab) to proceed or (esc) to leave".to_string();
                     key_block = key_block.clone().style(app.theme.inverted_text_style())
                 }
             };
@@ -262,7 +262,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
             match post_package_state {
                 PostPackageState::InputRecipients => {
                     status_text =
-                        "Type to enter recipients addresses, press (tab) to proceed or (esc) to go leave"
+                        "Type to enter recipients addresses, press (tab) to enter message (ctrl + s) to send or (esc) to go leave"
                             .to_string();
                     recipients_block = recipients_block
                         .clone()
@@ -274,7 +274,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
                     message_block = message_block.clone().style(app.theme.inverted_text_style())
                 }
                 PostPackageState::InputFundingWallet => {
-                    status_text = "Type to enter key or use terminal emulator paste, (tab) to enter recipients or (esc) to leave".to_string();
+                    status_text = "Type to enter key or use terminal emulator paste, (tab) to enter recipients (ctrl + s) to send or (esc) to leave".to_string();
                     key_block = key_block.clone().style(app.theme.inverted_text_style())
                 }
             };
@@ -394,8 +394,7 @@ pub fn ui(frame: &mut Frame, app: &mut App, interactions: &AppInteractions) {
         .bold();
     // let status_rect = Rect::new(0, area.height - 5, area.width, 5);
     // status_text = format!("{:?}\n{}", app.status, status_text);
-    let help_text = help_items.join(", ");
-    let status = Paragraph::new(Text::styled(help_text, Style::default()))
+    let status = Paragraph::new(Text::styled(status_text, Style::default()))
         .wrap(Wrap { trim: false })
         .block(status_block);
     frame.render_widget(status, ui_chunks[2]);

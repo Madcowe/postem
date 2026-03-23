@@ -295,6 +295,7 @@ async fn complete_transaction(app: &mut App) -> Result<(), PostemError> {
             let cost = app
                 .create_addressee(&app.create_name_input(), &app.create_key_input())
                 .await?;
+            app.change_state(AppState::ViewDoormat);
             app.set_error_text(&format!("Address created for: {cost} attos"));
         }
         AppState::PostPackage(_) => {
@@ -535,14 +536,14 @@ impl AppInteractions {
         let input = InputType::create_key_press(KeyCode::Char('p'), KeyModifiers::empty());
         let action = Action::create(
             Some("p Post package"),
-            Some("Press p to post a package"),
+            None,
             ToExecute::SyncFunction(post_package),
         );
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Char('c'), KeyModifiers::empty());
         let action = Action::create(
             Some("c Create address"),
-            Some("Press c to create an address"),
+            None,
             ToExecute::SyncFunction(create_addressee),
         );
         actions.insert(input, action);
@@ -552,7 +553,11 @@ impl AppInteractions {
         let app_state = AppState::ViewPackage;
         let mut actions = create_standard_actions();
         let input = InputType::create_key_press(KeyCode::Esc, KeyModifiers::empty());
-        let action = Action::create(None, None, ToExecute::SyncFunction(leave_view_package));
+        let action = Action::create(
+            None,
+            Some("Press (Esc) to go back"),
+            ToExecute::SyncFunction(leave_view_package),
+        );
         actions.insert(input, action);
         let input = InputType::create_key_press(KeyCode::Up, KeyModifiers::empty());
         let action = Action::create(None, None, ToExecute::SyncFunction(scroll_up));
